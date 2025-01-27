@@ -1,3 +1,5 @@
+pub mod x11;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -89,6 +91,31 @@ impl PixelFormat {
     };
 }
 
+/// Cursor information for a capture
+#[derive(Debug, Clone)]
+pub struct CursorData {
+    /// Raw RGBA pixel data for cursor image
+    pub pixels: Vec<u8>,
+    
+    /// Cursor width in pixels
+    pub width: u32,
+    
+    /// Cursor height in pixels 
+    pub height: u32,
+    
+    /// Cursor x position relative to capture area
+    pub x: i32,
+    
+    /// Cursor y position relative to capture area
+    pub y: i32,
+    
+    /// X offset of cursor hotspot
+    pub xhot: u32,
+    
+    /// Y offset of cursor hotspot
+    pub yhot: u32,
+}
+
 /// Raw captured image data and metadata
 #[derive(Debug)]
 pub struct CaptureData {
@@ -106,11 +133,19 @@ pub struct CaptureData {
     
     /// Pixel format specification
     pub format: PixelFormat,
+
+    /// Optional cursor overlay data
+    pub cursor: Option<CursorData>,
 }
 
 impl CaptureData {
     /// Create a new CaptureData instance with validation
     pub fn new(pixels: Vec<u8>, width: u32, height: u32, format: PixelFormat) -> Self {
+        Self::with_cursor(pixels, width, height, format, None)
+    }
+
+    /// Create a new CaptureData instance with cursor data
+    pub fn with_cursor(pixels: Vec<u8>, width: u32, height: u32, format: PixelFormat, cursor: Option<CursorData>) -> Self {
         let stride = width * format.bytes_per_pixel as u32;
         let expected_size = height * stride;
         
@@ -126,6 +161,7 @@ impl CaptureData {
             height,
             stride,
             format,
+            cursor,
         }
     }
 

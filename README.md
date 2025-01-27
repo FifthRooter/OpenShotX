@@ -6,6 +6,13 @@ screenshot tool for real linux users. handles both x11 and wayland because we're
 
 ## Status
 
+### Recent Progress
+- Completed X11 backend implementation:
+  - Direct screen/area/window capture via x11rb
+  - Cursor capture with XFixes support
+  - Robust pixel format handling
+  - Comprehensive test coverage
+
 Currently working on area selection in branch `feat/area-selection`. Check [ROADMAP.md](ROADMAP.md) for:
 - Full feature list & progress
 - Technical architecture

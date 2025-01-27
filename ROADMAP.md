@@ -38,7 +38,11 @@ CleanShitX is what happens when Linux users get tired of normie screenshot tools
   - [x] Error types and validation
   - [x] Unit test coverage
 - [ ] Native backend implementations
-  - [ ] X11: direct XGetImage via x11rb
+  - [x] X11: direct XGetImage via x11rb
+    - [x] Screen, area, and window capture
+    - [x] Cursor capture via XFixes
+    - [x] Pixel format detection and handling
+    - [x] Comprehensive test coverage
   - [ ] Wayland: wlr-screencopy protocol
 - [ ] GTK4 overlay window
   - [ ] Crosshair cursor
@@ -149,9 +153,22 @@ Methods:
 
 ## Technical Challenges
 
-### X11
+### X11 (Solved)
 - Different pixel formats between servers
+  - Solution: Robust pixel format detection with proper bit depth handling
+  - Handles LSB/MSB byte orders and various RGB formats
 - Cursor capture requires XFixes
+  - Solution: Optional XFixes support with graceful fallback
+  - ARGB cursor pixels converted to RGBA
+- Coordinate validation and type conversion
+  - Solution: Proper validation and clamping for i16 coordinates
+  - Error handling for out-of-bounds captures
+- Error handling and testing
+  - Solution: Custom error types for connection and reply errors
+  - Comprehensive unit and integration tests
+  - Tests handle X11 not being available gracefully
+
+### X11 (Remaining)
 - Window decorations handling
 - Compositor effects (shadows, transparency)
 
@@ -176,7 +193,14 @@ Methods:
 
 ## Testing Strategy
 - Unit tests for core logic
+  - Pixel format detection and handling
+  - Error types and validation
+  - Coordinate handling and bounds checking
 - Integration tests for capture
+  - Backend initialization and support detection
+  - Screen, area, and window capture
+  - Cursor capture and positioning
+  - Error cases and edge conditions
 - Manual testing matrix:
   - X11 + common WMs
   - Wayland + major compositors

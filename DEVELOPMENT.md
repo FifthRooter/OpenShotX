@@ -58,10 +58,20 @@ cargo test      # run test suite
    - Fallback: gnome-screenshot CLI
    - Future: proper portal implementation with wlr-screencopy
 
-3. X11 Handling:
-   - Direct XGetImage via x11rb
-   - XFixes for cursor capture
-   - Handle different pixel formats via PixelFormat abstraction
+3. X11 Handling (Implemented):
+   - Direct XGetImage via x11rb for screen/area/window capture
+   - XFixes extension for cursor capture with fallback
+   - Robust pixel format handling:
+     - Automatic bit depth detection (24/32-bit)
+     - LSB/MSB byte order support
+     - RGB/BGR format conversion
+   - Error handling:
+     - Custom error types for connection/reply errors
+     - Coordinate validation and bounds checking
+     - Graceful fallback when XFixes unavailable
+   - Comprehensive test coverage:
+     - Unit tests for format detection and error cases
+     - Integration tests with X11 availability checks
 
 4. Config Structure (WIP):
 ```yaml
@@ -86,15 +96,21 @@ capture:
 ```
 
 ### Testing Matrix
+- [x] X11 Backend
+  - [x] Screen capture with pixel format handling
+  - [x] Area selection with coordinate validation
+  - [x] Window capture with geometry detection
+  - [x] Cursor capture with XFixes
+  - [x] Error cases and edge conditions
 - [ ] Wayland/GNOME
   - Full screen capture
   - Area selection
   - Window selection
   - Multi-monitor
-- [ ] X11 fallback
-  - Same test cases as above
 
 ### Known Issues
 1. Need to handle different DPI scales
 2. Portal permissions on first run
 3. GTK overlay needs compositor support
+4. X11 window decorations not captured
+5. Compositor effects (shadows, transparency) may affect capture
