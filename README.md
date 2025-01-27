@@ -2,7 +2,16 @@
 
 ### cleanshit-linux
 
-based screenshot tool for real linux users. handles both x11 and wayland because we're not peasants.
+screenshot tool for real linux users. handles both x11 and wayland because we're not peasants.
+
+## Status
+
+Currently working on area selection in branch `feat/area-selection`. Check [ROADMAP.md](ROADMAP.md) for:
+- Full feature list & progress
+- Technical architecture
+- Development guidelines
+- Testing strategy
+- Release criteria
 
 ## Install Guide
 
@@ -15,7 +24,7 @@ wait for v0.1 you impatient fuck
 1. get rust
 2. `cargo build`
 3. pray it works
-4. if not, fix it yourself chad
+4. if not, fix it yourself
 
 ## License
 

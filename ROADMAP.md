@@ -30,28 +30,55 @@ CleanShitX is what happens when Linux users get tired of normie screenshot tools
   - Hotkeys: Ctrl+4 (full), Ctrl+Shift+4 (coming soon: area)
 - [x] Initial repo structure
 
+## In Progress (feat/area-selection)
+- [x] Display server abstraction
+  - [x] Core DisplayBackend trait
+  - [x] Pixel format handling (RGB/BGR/RGBA)
+  - [x] Raw pixel data + metadata
+  - [x] Error types and validation
+  - [x] Unit test coverage
+- [ ] Native backend implementations
+  - [ ] X11: direct XGetImage via x11rb
+  - [ ] Wayland: wlr-screencopy protocol
+- [ ] GTK4 overlay window
+  - [ ] Crosshair cursor
+  - [ ] Size display
+  - [ ] Escape to cancel
+- [ ] Config system for paths/hotkeys
+
 ## Core Architecture
 
 ### Backend (Rust)
 ```rust
 // Abstract display server handling
 trait DisplayBackend {
-    fn capture_screen(&self) -> Result<Image>;
-    fn capture_area(&self, x: i32, y: i32, w: i32, h: i32) -> Result<Image>;
-    fn capture_window(&self, id: WindowId) -> Result<Image>;
+    fn new() -> DisplayResult<Self>;
+    fn capture_screen(&self) -> DisplayResult<CaptureData>;
+    fn capture_area(&self, x: i32, y: i32, w: i32, h: i32) -> DisplayResult<CaptureData>;
+    fn capture_window(&self, id: u64) -> DisplayResult<CaptureData>;
+    fn is_supported() -> bool;
 }
 
-// Concrete implementations
+// Raw pixel data with metadata
+struct CaptureData {
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+    stride: u32,
+    format: PixelFormat,
+}
+
+// Concrete implementations (WIP)
 struct X11Backend {
-    // Learned: Need XGetImage for raw pixels
-    // Challenge: Handle different pixel formats (24/32bpp, BGR/RGB)
-    // Note: XFixes needed for cursor capture
+    // Using x11rb for XGetImage
+    // XFixes for cursor capture
+    // Native pixel format handling
 }
 
 struct WaylandBackend {
-    // Challenge: Different compositors support different protocols
-    // Need: wlr-screencopy-unstable-v1 for Sway/Hyprland
-    // Fallback: gnome-screenshot for GNOME
+    // Primary: wlr-screencopy protocol
+    // Fallback: gnome-screenshot
+    // Portal permissions handling
 }
 ```
 
@@ -70,7 +97,10 @@ Methods:
 
 ### 1. Core Screenshot (v0.1.0)
 - [ ] Rust backend with proper abstraction
-- [ ] Area selection with preview
+  - [x] Project structure setup
+  - [ ] Display server traits
+  - [ ] Error handling
+- [ ] Area selection with preview (IN PROGRESS)
 - [ ] Window detection/selection
 - [ ] Multi-monitor support
 - [ ] Proper cursor handling
