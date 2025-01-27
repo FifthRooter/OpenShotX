@@ -1,5 +1,28 @@
 # CleanShitX Roadmap
 
+## WTF is this?
+CleanShitX is what happens when Linux users get tired of normie screenshot tools. Born from the rage of switching from macOS's CleanShot X to Linux and finding nothing but bloated electron apps and command line peasantry.
+
+### Philosophy
+- **Zero Bullshit**: No electron, no web tech stack, no "cross-platform" compromises
+- **Chad Architecture**: Native Rust + DBus + X11/Wayland abstraction = based AF
+- **Features That Fuck**: Everything CleanShot X does + Linux-specific chad moves
+- **KISS My Ass**: Simple when you want it, powerful when you need it
+- **Performance or Death**: If it can't capture 4K@144Hz, it's not shipping
+
+### Why Rust?
+- Memory safety without the GC bullshit
+- FFI that doesn't make you want to die
+- Package ecosystem that isn't a dependency hell
+- Forces you to handle edge cases at compile time
+- Community of based individuals who give a fuck about performance
+
+### Target Audience
+- Linux power users who need more than `scrot`
+- Ex-macOS users who miss CleanShot X
+- Anyone who thinks Electron is cancer
+- Screenshot chads who need that extra 0.1ms performance
+
 ## Current State (v0.0.1-alpha)
 - [x] Basic POC with xbindkeys
   - X11: scrot for window captures
