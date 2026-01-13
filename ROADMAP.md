@@ -104,16 +104,16 @@ Methods:
 ## Priority Features
 
 ### 1. Core Screenshot (v0.1.0)
-- [ ] Rust backend with proper abstraction
+- [x] Rust backend with proper abstraction
   - [x] Project structure setup
-  - [ ] Display server traits
-  - [ ] Error handling
-- [ ] Area selection with preview (IN PROGRESS)
+  - [x] Display server traits
+  - [x] Error handling
+- [x] Area selection with preview (GTK4 overlay)
+- [ ] OCR integration (NEXT - see OCR_TASK_PROMPT.md)
 - [ ] Window detection/selection
 - [ ] Multi-monitor support
-- [ ] Proper cursor handling
 - [ ] Quick edit overlay
-- [ ] Save to ~/Pictures with better naming
+- [x] Save to ~/Pictures with better naming
 
 ### 2. Recording (v0.2.0)
 - [ ] Screen recording (FFmpeg integration)
