@@ -1,46 +1,50 @@
 # Progress Tracker
 
-## Phase 1: Complete `capture_screen`
+## Completed
 
-- [x] **Add Image Parsing:**
-  - [x] Add `image` crate to `Cargo.toml`.
-  - [x] Implement image parsing in `capture_screen`.
-  - [x] Map `image` color type to `PixelFormat`.
-- [x] **Testing for `capture_screen`:**
-  - [x] Create `tests/wayland_backend_test.rs`.
-  - [x] Add integration test for `capture_screen`.
-  - [x] Add unit test for portal error handling.
-  - [x] Add unit test for invalid URI handling.
+### Phase 1: Wayland Backend (ashpd)
+- [x] Add `ashpd` crate for xdg-desktop-portal integration
+- [x] Implement `capture_screen()` with non-interactive mode
+- [x] Implement `capture_area()` with interactive mode
+- [x] Implement `capture_window()` with interactive mode
+- [x] Add integration tests with portal handling
+- [x] Fix integer overflow bug in test validation
 
-## Phase 2: Implement `capture_area`
+### Phase 2: X11 Backend
+- [x] Direct XGetImage capture via `x11rb`
+- [x] Screen, area, and window capture
+- [x] XFixes cursor capture with fallback
+- [x] Pixel format detection (RGB/BGR, 24/32-bit)
+- [x] Comprehensive unit and integration tests
 
-- [x] **Implementation:**
-  - [x] Implement `capture_area` using the `interactive` portal option.
-- [x] **Testing for `capture_area`:**
-  - [x] Document manual test case for `capture_area`.
-  - [x] Add unit test for `interactive` option.
+### Phase 3: Image Saving Module
+- [x] Add `image` crate with PNG/JPEG features
+- [x] Add `chrono` crate for timestamps
+- [x] Implement pixel format conversion (6 variants)
+- [x] Implement cursor compositing with alpha blending
+- [x] Implement `save_capture()` with configurable options
+- [x] Implement `quick_save()` with defaults
+- [x] Add 11 unit tests for conversion and saving
+- [x] Update library exports
 
-## Phase 3: Implement `capture_window`
+## In Progress
 
-- [x] **Implementation:**
-  - [x] Implement `capture_window` using the `interactive` portal option.
-- [x] **Testing for `capture_window`:**
-  - [x] Document manual test case for `capture_window`.
-  - [x] Add unit test for `capture_window` options.
+### Phase 4: CLI Frontend
+- [x] Create `src/main.rs` executable
+- [x] Implement command-line argument parsing
+- [x] Wire up capture → save pipeline
+- [x] Re-export backend implementations
+- [x] Test on Wayland (screen capture working)
 
-## Phase 4: Refactoring and Library Integration
+## TODO (v0.1.0 blockers)
 
-- [x] **Use ashpd Library:**
-  - [x] Replace manual D-Bus implementation with ashpd
-  - [x] Proper async/sync handling with zbus
-  - [x] Remove unused dbus_proxy.rs
-- [x] **Error Handling:**
-  - [x] Ensure consistent error wrapping.
-  - [x] Handle user cancellation gracefully.
-  - [x] Fix integer overflow bug in test validation.
+- [ ] GTK4 overlay for area selection
+- [ ] Config system (YAML via `serde_yml`)
+- [ ] Multi-monitor support
+- [ ] CLI hotkey integration
 
-## Summary
+## Notes
 
-All phases completed. Wayland backend is fully functional using ashpd library for xdg-desktop-portal integration.
+**Wayland limitations:** Area/window capture require user interaction through portal dialogs. Coordinate-based capture is intentionally not possible.
 
-**Note:** On Wayland, `capture_area()` and `capture_window()` use interactive mode where the user selects through the portal dialog. The coordinate/window_id parameters are ignored due to Wayland security limitations.
+**Test status:** 33/33 tests passing (22 backend + 11 capture)

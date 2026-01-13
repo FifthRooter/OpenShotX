@@ -1,6 +1,10 @@
 pub mod x11;
 pub mod wayland;
 
+// Re-export backend implementations
+pub use x11::X11Backend;
+pub use wayland::WaylandBackend;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
