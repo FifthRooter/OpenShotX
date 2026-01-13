@@ -8,6 +8,7 @@
 use cleanshitx::{
     backend::{X11Backend, WaylandBackend, CaptureData, DisplayBackend},
     capture::{save_capture, SaveConfig, ImageFormat},
+    select_area,
 };
 use std::path::PathBuf;
 
@@ -142,9 +143,21 @@ fn run_capture(args: &[String]) {
         match capture_type {
             "screen" => backend.capture_screen().expect("Screen capture failed"),
             "area" => {
-                eprintln!("Error: area capture with coordinates not yet supported via CLI");
-                eprintln!("Use 'capture screen' and crop manually, or wait for GTK4 overlay");
-                std::process::exit(1);
+                // Show GTK overlay for area selection
+                println!("Select an area by dragging the mouse. Press ESC to cancel.");
+                let selection = select_area()
+                    .expect("Failed to show area selection overlay");
+
+                match selection {
+                    Some(area) => {
+                        backend.capture_area(area.x, area.y, area.width, area.height)
+                            .expect("Area capture failed")
+                    }
+                    None => {
+                        eprintln!("Selection cancelled");
+                        std::process::exit(0);
+                    }
+                }
             }
             "window" => {
                 eprintln!("Error: window capture by ID not yet supported via CLI");

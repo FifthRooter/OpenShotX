@@ -48,10 +48,10 @@ CleanShitX is what happens when Linux users get tired of normie screenshot tools
     - [x] Area capture (interactive mode)
     - [x] Window capture (interactive mode)
     - [x] Full test coverage
-- [ ] GTK4 overlay window
-  - [ ] Crosshair cursor
-  - [ ] Size display
-  - [ ] Escape to cancel
+- [x] GTK4 overlay window
+  - [x] Crosshair cursor
+  - [x] Size display
+  - [x] Escape to cancel
 - [ ] Config system for paths/hotkeys
 
 ## Core Architecture

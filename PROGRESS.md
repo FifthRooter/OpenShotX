@@ -36,9 +36,16 @@
 - [x] Re-export backend implementations
 - [x] Test on Wayland (screen capture working)
 
+### Phase 5: GTK4 Overlay (X11 area selection)
+- [x] Add gtk4 dependency (0.10)
+- [x] Create `src/overlay.rs` module
+- [x] Full-screen transparent window with crosshair cursor
+- [x] Mouse drag selection with live dimension display
+- [x] ESC to cancel handling
+- [x] Integration with X11 backend area capture
+
 ## TODO (v0.1.0 blockers)
 
-- [ ] GTK4 overlay for area selection
 - [ ] Config system (YAML via `serde_yml`)
 - [ ] Multi-monitor support
 - [ ] CLI hotkey integration

@@ -10,6 +10,9 @@ zbus = "5.11.0"  # for dbus/portal communication
 tokio = { version = "1.47.1", features = ["full"] }
 ashpd = { version = "0.11", default-features = false, features = ["tokio"] }
 
+# GUI overlay for area selection (X11)
+gtk4 = "0.10"
+
 # error handling
 thiserror = "2.0.16"
 anyhow = "1.0.99"
