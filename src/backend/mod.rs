@@ -1,4 +1,5 @@
 pub mod x11;
+pub mod wayland;
 
 use thiserror::Error;
 
@@ -88,6 +89,15 @@ impl PixelFormat {
         red_mask: 0x0000FF,
         green_mask: 0x00FF00,
         blue_mask: 0xFF0000,
+    };
+
+    /// 32-bit BGRA format (8 bits per channel)
+    pub const BGRA32: Self = Self {
+        bits_per_pixel: 32,
+        bytes_per_pixel: 4,
+        red_mask: 0x0000FF00,
+        green_mask: 0x00FF0000,
+        blue_mask: 0xFF000000,
     };
 }
 

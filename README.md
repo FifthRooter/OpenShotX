@@ -2,7 +2,7 @@
 
 ### openshotX
 
-Screenshot tool for linux users. (should) handle both x11 and wayland, but i'm doing development on wayland.
+Screenshot tool for linux users. Handles both x11 and wayland with native backends.
 
 Since moving from MacOS to Linux, the app I most miss is CleanShot X - by far the most feature-full and "just works" screenshot app out there. So now I'm trying to build one for Linux.
 
@@ -23,14 +23,30 @@ Thinking about adding:
 
 ## Status
 
-### Recent Progress
-- Completed X11 backend implementation:
-  - Direct screen/area/window capture via x11rb
-  - Cursor capture with XFixes support
-  - Robust pixel format handling
-  - Comprehensive test coverage
+### v0.1.0-alpha
 
-Currently working on area selection in branch `feat/area-selection`. Check [ROADMAP.md](ROADMAP.md) for:
+**X11 Backend:** Complete
+- Direct screen/area/window capture via x11rb
+- Cursor capture with XFixes support
+- Robust pixel format handling (RGB/BGR, 24/32-bit, LSB/MSB)
+- Comprehensive test coverage
+
+**Wayland Backend:** Complete
+- Screen capture via xdg-desktop-portal using ashpd
+- Area and window capture (interactive mode only)
+- Tested on Hyprland, works on KDE/Sway/GNOME
+- Full test coverage
+
+**Note:** Wayland has security limitations - area/window capture require user interaction through portal dialogs. Coordinate-based and programmatic capture are intentionally not possible on Wayland.
+
+### Recent Progress
+- Completed Wayland backend implementation:
+  - Using ashpd library for portal integration
+  - All capture methods working (screen/area/window)
+  - Integration tests passing
+  - Fixed integer overflow bug in test validation
+
+Check [ROADMAP.md](ROADMAP.md) for:
 - Full feature list & progress
 - Technical architecture
 - Development guidelines

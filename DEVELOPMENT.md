@@ -53,10 +53,11 @@ cargo test      # run test suite
    }
    ```
 
-2. Wayland Handling:
-   - Primary: gnome-shell-screenshot portal
-   - Fallback: gnome-screenshot CLI
-   - Future: proper portal implementation with wlr-screencopy
+2. Wayland Handling (COMPLETED):
+   - Primary: xdg-desktop-portal via ashpd library
+   - Supports: Screen, area (interactive), window (interactive)
+   - Tested on: Hyprland, works on KDE/Sway/GNOME
+   - Limitations: No programmatic area/window capture due to security model
 
 3. X11 Handling (Implemented):
    - Direct XGetImage via x11rb for screen/area/window capture
@@ -102,11 +103,11 @@ capture:
   - [x] Window capture with geometry detection
   - [x] Cursor capture with XFixes
   - [x] Error cases and edge conditions
-- [ ] Wayland/GNOME
-  - Full screen capture
-  - Area selection
-  - Window selection
-  - Multi-monitor
+- [x] Wayland Backend
+  - [x] Full screen capture
+  - [x] Area selection (interactive mode)
+  - [x] Window selection (interactive mode)
+  - [x] Error cases and portal cancellation handling
 
 ### Known Issues
 1. Need to handle different DPI scales

@@ -37,13 +37,17 @@ CleanShitX is what happens when Linux users get tired of normie screenshot tools
   - [x] Raw pixel data + metadata
   - [x] Error types and validation
   - [x] Unit test coverage
-- [ ] Native backend implementations
+- [x] Native backend implementations
   - [x] X11: direct XGetImage via x11rb
     - [x] Screen, area, and window capture
     - [x] Cursor capture via XFixes
     - [x] Pixel format detection and handling
     - [x] Comprehensive test coverage
-  - [ ] Wayland: wlr-screencopy protocol
+  - [x] Wayland: xdg-desktop-portal via ashpd
+    - [x] Screen capture
+    - [x] Area capture (interactive mode)
+    - [x] Window capture (interactive mode)
+    - [x] Full test coverage
 - [ ] GTK4 overlay window
   - [ ] Crosshair cursor
   - [ ] Size display
@@ -80,9 +84,9 @@ struct X11Backend {
 }
 
 struct WaylandBackend {
-    // Primary: wlr-screencopy protocol
-    // Fallback: gnome-screenshot
-    // Portal permissions handling
+    // Primary: xdg-desktop-portal via ashpd
+    // Handles: Screen, area (interactive), window (interactive)
+    // Limitations: No programmatic area/window capture due to security model
 }
 ```
 
@@ -172,11 +176,14 @@ Methods:
 - Window decorations handling
 - Compositor effects (shadows, transparency)
 
-### Wayland
+### Wayland (Completed)
 - Protocol fragmentation
+  - Solution: Use xdg-desktop-portal for compositor-agnostic access
 - Limited screen capture APIs
-- Need different approaches per compositor
+  - Solution: ashpd library handles portal interactions
 - Security/permission models
+  - Solution: User must interactively approve each capture
+- **Known limitation:** Area/window capture require user interaction through portal dialogs
 
 ### Performance
 - Fast pixel buffer handling
