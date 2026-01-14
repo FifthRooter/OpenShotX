@@ -4,11 +4,13 @@
 //!   cargo run -- capture screen
 //!   cargo run -- capture area
 //!   cargo run -- capture window
+//!   cargo run -- ocr <image>
 
 use cleanshitx::{
     backend::{X11Backend, WaylandBackend, CaptureData, DisplayBackend},
     capture::{save_capture, SaveConfig, ImageFormat},
     select_area,
+    ocr::{extract_text_from_path, OcrConfig},
 };
 use std::path::PathBuf;
 
@@ -29,6 +31,14 @@ fn main() {
             }
             run_capture(&args);
         }
+        "ocr" => {
+            if args.len() < 3 {
+                eprintln!("Error: missing image path");
+                print_usage();
+                std::process::exit(1);
+            }
+            run_ocr(&args);
+        }
         "--help" | "-h" => print_usage(),
         _ => {
             eprintln!("Error: unknown command '{}'", args[1]);
@@ -44,20 +54,33 @@ fn print_usage() {
     println!("Usage: cargo run -- <command> [options]");
     println!();
     println!("Commands:");
-    println!("  capture screen    Capture the entire screen");
-    println!("  capture area      Capture a selected area (Wayland: interactive)");
-    println!("  capture window    Capture a specific window (Wayland: interactive)");
+    println!("  capture <type>    Capture a screenshot");
+    println!("  ocr <image>       Extract text from an image");
     println!();
-    println!("Options:");
+    println!("Capture types:");
+    println!("  screen            Capture the entire screen");
+    println!("  area              Capture a selected area (Wayland: interactive)");
+    println!("  window            Capture a specific window (Wayland: interactive)");
+    println!();
+    println!("Capture options:");
     println!("  --output <path>   Save to specific path (default: ~/Pictures)");
     println!("  --no-cursor       Don't include cursor in screenshot");
     println!("  --jpeg [quality]  Save as JPEG with quality 1-100 (default: PNG)");
     println!("  --prefix <text>   Prefix for filename (default: 'screenshot')");
+    println!("  --ocr             Run OCR on captured image and copy to clipboard");
+    println!();
+    println!("OCR options:");
+    println!("  --lang <code>     Language(s) for OCR (default: eng)");
+    println!("                    Examples: eng, eng+fra, eng+fra+deu");
+    println!("  --min-conf <n>    Minimum confidence threshold (default: 50)");
+    println!("  --no-clipboard    Don't copy to clipboard");
     println!();
     println!("Examples:");
     println!("  cargo run -- capture screen");
     println!("  cargo run -- capture screen --output ~/Desktop/test.png");
-    println!("  cargo run -- capture screen --no-cursor --jpeg 90");
+    println!("  cargo run -- capture screen --ocr");
+    println!("  cargo run -- ocr screenshot.png");
+    println!("  cargo run -- ocr screenshot.png --lang eng+fra --min-conf 60");
 }
 
 fn run_capture(args: &[String]) {
@@ -70,6 +93,10 @@ fn run_capture(args: &[String]) {
     let mut use_jpeg = false;
     let mut jpeg_quality = 85;
     let mut prefix: Option<String> = None;
+    let mut run_ocr = false;
+    let mut ocr_lang: Option<String> = None;
+    let mut ocr_min_conf: Option<i32> = None;
+    let mut ocr_clipboard = true;
 
     let mut i = 3;
     while i < args.len() {
@@ -107,6 +134,37 @@ fn run_capture(args: &[String]) {
                 }
                 prefix = Some(args[i + 1].clone());
                 i += 2;
+            }
+            "--ocr" => {
+                run_ocr = true;
+                i += 1;
+            }
+            "--lang" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --lang requires a language code");
+                    std::process::exit(1);
+                }
+                ocr_lang = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--min-conf" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --min-conf requires a number");
+                    std::process::exit(1);
+                }
+                let value: i32 = match args[i + 1].parse() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        eprintln!("Error: --min-conf requires a valid number");
+                        std::process::exit(1);
+                    }
+                };
+                ocr_min_conf = Some(value);
+                i += 2;
+            }
+            "--no-clipboard" => {
+                ocr_clipboard = false;
+                i += 1;
             }
             _ => {
                 eprintln!("Error: unknown option '{}'", args[i]);
@@ -202,12 +260,125 @@ fn run_capture(args: &[String]) {
     }
 
     // Save the capture
-    match save_capture(&capture, &config) {
+    let saved_path = match save_capture(&capture, &config) {
         Ok(path) => {
             println!("Saved to: {}", path.display());
+            path
         }
         Err(e) => {
             eprintln!("Error saving capture: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Run OCR if requested
+    if run_ocr {
+        println!("Running OCR...");
+        let mut ocr_config = OcrConfig::default()
+            .with_clipboard(ocr_clipboard);
+
+        if let Some(lang) = ocr_lang {
+            ocr_config = ocr_config.with_language(lang);
+        }
+
+        if let Some(conf) = ocr_min_conf {
+            ocr_config = ocr_config.with_min_confidence(conf);
+        }
+
+        match extract_text_from_path(&saved_path, &ocr_config) {
+            Ok(result) => {
+                println!("OCR successful!");
+                println!("Confidence: {}%", result.confidence);
+                println!("Extracted text:");
+                println!("{}", "-".repeat(40));
+                println!("{}", result.text);
+                println!("{}", "-".repeat(40));
+                if result.copied_to_clipboard {
+                    println!("Text copied to clipboard");
+                }
+            }
+            Err(e) => {
+                eprintln!("OCR failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn run_ocr(args: &[String]) {
+    let image_path = &args[2];
+
+    // Parse OCR options
+    let mut ocr_lang: Option<String> = None;
+    let mut ocr_min_conf: Option<i32> = None;
+    let mut ocr_clipboard = true;
+
+    let mut i = 3;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--lang" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --lang requires a language code");
+                    std::process::exit(1);
+                }
+                ocr_lang = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--min-conf" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --min-conf requires a number");
+                    std::process::exit(1);
+                }
+                let value: i32 = match args[i + 1].parse() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        eprintln!("Error: --min-conf requires a valid number");
+                        std::process::exit(1);
+                    }
+                };
+                ocr_min_conf = Some(value);
+                i += 2;
+            }
+            "--no-clipboard" => {
+                ocr_clipboard = false;
+                i += 1;
+            }
+            _ => {
+                eprintln!("Error: unknown option '{}'", args[i]);
+                print_usage();
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Build OCR config
+    let mut ocr_config = OcrConfig::default()
+        .with_clipboard(ocr_clipboard);
+
+    if let Some(lang) = ocr_lang {
+        ocr_config = ocr_config.with_language(lang);
+    }
+
+    if let Some(conf) = ocr_min_conf {
+        ocr_config = ocr_config.with_min_confidence(conf);
+    }
+
+    // Run OCR
+    println!("Running OCR on: {}", image_path);
+    match extract_text_from_path(image_path, &ocr_config) {
+        Ok(result) => {
+            println!("OCR successful!");
+            println!("Confidence: {}%", result.confidence);
+            println!("Extracted text:");
+            println!("{}", "-".repeat(40));
+            println!("{}", result.text);
+            println!("{}", "-".repeat(40));
+            if result.copied_to_clipboard {
+                println!("Text copied to clipboard");
+            }
+        }
+        Err(e) => {
+            eprintln!("OCR failed: {}", e);
             std::process::exit(1);
         }
     }

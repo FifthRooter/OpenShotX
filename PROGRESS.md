@@ -2,6 +2,34 @@
 
 ## Completed
 
+### Phase 6: OCR Module
+- [x] Add tesseract-rs and arboard dependencies
+- [x] Create `src/ocr/mod.rs` module with:
+  - `OcrConfig` struct (language, min_confidence, clipboard, datapath)
+  - `extract_text()` function from CaptureData
+  - `extract_text_from_path()` function from image files
+  - `copy_to_clipboard()` function using arboard
+  - RGBA to grayscale conversion for Tesseract
+  - Comprehensive error handling
+  - 8 unit tests
+- [x] Update `src/lib.rs` to export ocr module
+- [x] Add `ocr` subcommand to CLI with options:
+  - `--lang <code>` for language selection
+  - `--min-conf <n>` for confidence threshold
+  - `--no-clipboard` to disable clipboard copy
+- [x] Add `--ocr` flag to capture command for integrated workflow
+- [x] Update usage documentation
+
+**System Requirements for OCR:**
+- `tesseract` (system package)
+- `leptonica` (system package)
+- Language data: `tesseract-data-eng` (or other languages)
+
+**Install commands:**
+- Arch: `sudo pacman -S tesseract leptonica tesseract-data-eng`
+- Ubuntu/Debian: `sudo apt install tesseract-ocr libtesseract-dev`
+- Fedora: `sudo dnf install tesseract leptonica`
+
 ### Phase 1: Wayland Backend (ashpd)
 - [x] Add `ashpd` crate for xdg-desktop-portal integration
 - [x] Implement `capture_screen()` with non-interactive mode

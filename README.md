@@ -37,14 +37,22 @@ Thinking about adding:
 - Tested on Hyprland, works on KDE/Sway/GNOME
 - Full test coverage
 
+**OCR Module:** Complete
+- Text extraction via tesseract
+- Multi-language support (eng, fra, deu, etc.)
+- Automatic clipboard integration (wl-copy for Wayland, arboard for X11)
+- Configurable confidence threshold
+- CLI: `cargo run -- capture area --ocr`
+
 **Note:** Wayland has security limitations - area/window capture require user interaction through portal dialogs. Coordinate-based and programmatic capture are intentionally not possible on Wayland.
 
 ### Recent Progress
-- Completed Wayland backend implementation:
-  - Using ashpd library for portal integration
-  - All capture methods working (screen/area/window)
-  - Integration tests passing
-  - Fixed integer overflow bug in test validation
+- Completed OCR implementation:
+  - tesseract integration for text extraction
+  - Cross-platform clipboard support (Wayland: wl-copy, X11: arboard)
+  - Standalone `ocr` command and integrated `--ocr` flag
+  - Multi-language and confidence configuration
+  - 41/42 tests passing
 
 Check [ROADMAP.md](ROADMAP.md) for:
 - Full feature list & progress
@@ -62,9 +70,13 @@ wait for v0.1 you impatient fuck
 ## Building from source
 
 1. get rust
-2. `cargo build`
-3. pray it works
-4. if not, fix it yourself
+2. Install OCR dependencies (optional, for OCR feature):
+   - Arch: `sudo pacman -S tesseract leptonica tesseract-data-eng`
+   - Ubuntu: `sudo apt install tesseract-ocr libtesseract-dev`
+   - Fedora: `sudo dnf install tesseract leptonica`
+3. `cargo build`
+4. pray it works
+5. if not, fix it yourself
 
 ## License
 

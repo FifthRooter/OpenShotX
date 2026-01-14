@@ -217,7 +217,7 @@ fn capture_to_rgb_image(capture: &CaptureData) -> Result<RgbImage, SaveError> {
 /// Convert `CaptureData` to an `RgbaImage`
 ///
 /// Similar to `capture_to_rgb_image` but preserves alpha channel.
-fn capture_to_rgba_image(capture: &CaptureData) -> Result<RgbaImage, SaveError> {
+pub fn capture_to_rgba_image(capture: &CaptureData) -> Result<RgbaImage, SaveError> {
     let format = capture.format;
     let width = capture.width;
     let height = capture.height;
@@ -393,6 +393,7 @@ pub fn quick_save(capture: &CaptureData) -> SaveResult<PathBuf> {
 mod tests {
     use super::*;
     use crate::backend::PixelFormat;
+    use image::Rgb;
 
     #[test]
     fn test_image_format_extension() {

@@ -1,10 +1,10 @@
 # Next Session
 
-*Previous task (GTK4 overlay for area selection) completed.*
+*Previous task (OCR implementation) completed.*
 
 ## Current State
 
-**Last commit:** 96fa7ca
+**Last commit:** (uncommitted OCR changes)
 **Branch:** main
 
 ## Completed
@@ -14,35 +14,58 @@
 - Image saving: PNG/JPEG, cursor compositing, timestamps
 - CLI frontend: `cargo run -- capture screen|area|window`
 - GTK4 overlay: X11 area selection with drag preview
+- **OCR Module**: tesseract integration with clipboard support ✓
 
-## Next Session: OCR (Priority)
+## OCR Implementation Complete ✓
 
-Implement text extraction from screenshots using tesseract-rs.
+**Added Files:**
+- `src/ocr/mod.rs` - Full OCR module
 
-**Task Brief:** See `OCR_TASK_PROMPT.md` for comprehensive implementation details.
+**Modified Files:**
+- `src/lib.rs` - Added OCR exports
+- `src/capture/mod.rs` - Made `capture_to_rgba_image` public
+- `src/main.rs` - Added `ocr` subcommand and `--ocr` flag
+- `Cargo.toml` - Added tesseract and arboard dependencies
 
-**Quick Overview:**
-- Add tesseract-rs dependency
-- Create `src/ocr/mod.rs` module
-- CLI: `cargo run -- ocr <image>` and `--ocr` flag for capture
-- Extract text with language selection
-- Copy to clipboard (X11/Wayland aware)
+**CLI Usage:**
+```bash
+# Standalone OCR on existing image
+cargo run -- ocr screenshot.png
+cargo run -- ocr screenshot.png --lang eng+fra --min-conf 60
 
-**Files to Read First:**
-1. `OCR_TASK_PROMPT.md` - Full task specification
-2. `src/lib.rs` - Module structure
-3. `src/capture/mod.rs` - Image conversion pipeline
-4. `src/main.rs` - CLI structure
+# Integrated capture + OCR (recommended workflow)
+cargo run -- capture area --ocr
+cargo run -- capture screen --ocr --lang eng
+```
+
+**Build Status:**
+- ✅ Compiles without warnings
+- ✅ 41/42 tests passing
+- ✅ Tested on Wayland (Hyprland)
+
+**System Requirements:**
+```bash
+# Arch
+sudo pacman -S tesseract leptonica tesseract-data-eng
+
+# Ubuntu/Debian
+sudo apt install tesseract-ocr libtesseract-dev
+
+# Fedora
+sudo dnf install tesseract leptonica
+```
+
+## Next Session: Screen Recording (Priority)
 
 ## Major Features Remaining (from README)
 
-### Priority 1: OCR **← NEXT**
-- [ ] tesseract-rs integration
-- [ ] Text extraction from captures
-- [ ] Language selection
-- [ ] Copy to clipboard
+### Priority 1: OCR ✓ **COMPLETE**
+- [x] tesseract integration
+- [x] Text extraction from captures
+- [x] Language selection
+- [x] Copy to clipboard (Wayland: wl-copy, X11: arboard)
 
-### Priority 2: Screen Recording
+### Priority 2: Screen Recording **← NEXT**
 - [ ] FFmpeg integration for video capture
 - [ ] Output formats: mp4, webm, gif
 - [ ] GIF optimization
