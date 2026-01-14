@@ -4,16 +4,18 @@
 
 screenshot tool for linux. handles x11 and wayland.
 
-moved from macos to linux and cleanshot x is the one app i actually miss. so now i'm building my own version because every linux screenshot tool is either ancient garbage or a bloated electron app.
+ever since i moved from macos to linux and cleanshot x is the one app i actually miss.
 
-zero electron. native rust. gets the fuck out of your way.
+so let's rip it off and share it with the linux world for free.
+
+i'm building this while HEAVILY assissted by LLMs (Gemini 3s, Claudes, GLM 4.7). it's fine if you don't approve etc, i don't really care. it's been 2 years since i started this project and nothing proper has come out still, and i still really miss OpenShot X. imo it's better this project exists because of AI than never having existed. you don't have to use it.
 
 ## what actually works right now
 
 **screenshots:**
 - `cargo run -- capture screen` - grabs the whole screen
 - `cargo run -- capture area` - drag to select an area (x11 has gtk overlay, wayland uses portal dialogs)
-- `cargo run -- capture window` - window capture (wayland: portal, x11: not implemented yet lol)
+- `cargo run -- capture window` - window capture (wayland: portal, x11: not implemented yet)
 
 **OCR - text extraction from screenshots:**
 - `cargo run -- capture area --ocr` - select area, extract text, copy to clipboard
@@ -32,7 +34,7 @@ options:
 - `--min-conf <n>` - ocr confidence threshold (0-100, default 50)
 - `--no-clipboard` - don't copy ocr result to clipboard
 
-## tech shit (if you care)
+## technicals
 
 **x11 backend:**
 - uses x11rb directly (no xlib garbage)
@@ -87,8 +89,6 @@ x11 backend: complete
 wayland backend: complete
 ocr: complete
 gtk4 area overlay: complete
-
-41/42 tests passing.
 
 check ROADMAP.md if you want the full picture.
 

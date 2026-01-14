@@ -1,2 +1,0 @@
-please update readme, roadmap and development with everything we discovered (if relevant), what we fixed, what we added, what we changed, what we did for testing, what we need to do, what's next to do etc.
-also then ofc make a commit with the updates
