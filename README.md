@@ -2,13 +2,13 @@
 
 ### openshotX
 
-screenshot tool for linux. handles x11 and wayland.
+screenshot++ tool for linux. handles x11 and wayland.
 
-ever since i moved from macos to linux and cleanshot x is the one app i actually miss.
+ever since i moved from macos to linux CleanShot X is the one app i actually miss.
 
 so let's rip it off and share it with the linux world for free.
 
-i'm building this while HEAVILY assissted by LLMs (Gemini 3s, Claudes, GLM 4.7). it's fine if you don't approve etc, i don't really care. it's been 2 years since i started this project and nothing proper has come out still, and i still really miss OpenShot X. imo it's better this project exists because of AI than never having existed. you don't have to use it.
+i'm building this while HEAVILY assissted by LLMs (Gemini 3s, Claudes, GLM 4.7). it's fine if you don't approve etc, i don't really care. it's been 2 years since i created this repo and nothing proper has come out still. imo it's better this project exists because of AI than never having existed. you don't have to use it.
 
 ## what actually works right now
 
