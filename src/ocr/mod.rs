@@ -137,6 +137,15 @@ fn rgba_to_luma(image: &RgbaImage) -> Vec<u8> {
 /// # Example
 /// ```no_run
 /// use cleanshitx::ocr::{extract_text, OcrConfig};
+/// use cleanshitx::backend::{CaptureData, PixelFormat};
+///
+/// // Create a dummy capture
+/// let capture = CaptureData::new(
+///     vec![0; 4], // 1x1 RGBA pixel
+///     1,
+///     1,
+///     PixelFormat::RGBA32,
+/// );
 ///
 /// let config = OcrConfig::default()
 ///     .with_language("eng+fra")
@@ -400,14 +409,5 @@ mod tests {
         // Should fail because there's no text
         let result = extract_text(&capture, &config);
         assert!(matches!(result, Err(OcrError::NoTextDetected)));
-    }
-
-    // Note: Full OCR integration tests require Tesseract to be installed
-    // and are therefore marked as ignored by default
-    #[test]
-    #[ignore = "requires tesseract installation"]
-    fn test_extract_text_basic() {
-        // This test would create an image with actual text and verify OCR works
-        // Skipped by default since it requires Tesseract installation
     }
 }
