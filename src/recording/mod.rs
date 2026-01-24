@@ -4,6 +4,7 @@ use thiserror::Error;
 use zbus::zvariant::OwnedValue;
 use gst::prelude::*;
 use gstreamer as gst;
+use gstreamer_app as gst_app;
 
 #[derive(Debug, Error)]
 pub enum RecordError {
@@ -27,6 +28,9 @@ pub enum RecordError {
     
     #[error("No suitable video encoder found. Please install gst-plugins-good/ugly/bad.")]
     NoEncoderFound,
+    
+    #[error("GIF encoding error: {0}")]
+    GifError(String),
 }
 
 pub type RecordResult<T> = Result<T, RecordError>;
@@ -107,9 +111,14 @@ const PROFILES: &[EncoderProfile] = &[
 ];
 
 /// Start a recording session
-pub async fn start_recording(config: RecordingConfig) -> RecordResult<()> {
+pub async fn start_recording(config: RecordingConfig) -> RecordResult<PathBuf> {
     // 1. Initialize GStreamer
     gst::init().map_err(|e| RecordError::InitError(e.to_string()))?;
+
+    // Check if GIF requested
+    if config.output_path.extension().map_or(false, |e| e == "gif") {
+        return record_gif_rust(config).await;
+    }
 
     // 2. Select Encoder Profile
     let (profile, final_path) = select_encoder(&config.output_path)?;
@@ -232,6 +241,62 @@ pub async fn start_recording(config: RecordingConfig) -> RecordResult<()> {
     if let Ok(metadata) = std::fs::metadata(&final_path) {
         println!("File size: {:.2} MB", metadata.len() as f64 / 1024.0 / 1024.0);
     }
+    
+    Ok(final_path)
+}
+
+pub fn copy_to_clipboard(path: &PathBuf) -> RecordResult<()> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+    
+    println!("Copying to clipboard...");
+    
+    // Convert path to file:// URI for better compatibility with chat apps (Discord, Slack, etc.)
+    // They often fail to handle raw image/gif bytes but handle text/uri-list correctly.
+    let uri = url::Url::from_file_path(path)
+        .map_err(|_| RecordError::GStreamerError("Failed to convert path to URI".into()))?
+        .to_string();
+
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        // Wayland: use wl-copy with text/uri-list
+        let mut child = Command::new("wl-copy")
+            .arg("--type")
+            .arg("text/uri-list")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|_| RecordError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "wl-copy not found. Install wl-clipboard.")))?;
+            
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(uri.as_bytes())?;
+        }
+        
+        let status = child.wait()?;
+        if !status.success() {
+            return Err(RecordError::GStreamerError("wl-copy failed".into()));
+        }
+    } else {
+        // X11: use xclip with text/uri-list
+        let mut child = Command::new("xclip")
+            .arg("-selection")
+            .arg("clipboard")
+            .arg("-t")
+            .arg("text/uri-list")
+            .arg("-i")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|_| RecordError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "xclip not found. Install xclip.")))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(uri.as_bytes())?;
+        }
+
+        let status = child.wait()?;
+        if !status.success() {
+             return Err(RecordError::GStreamerError("xclip failed".into()));
+        }
+    }
+    
+    println!("Copied GIF URI to clipboard!");
     Ok(())
 }
 
@@ -274,12 +339,11 @@ async fn build_pipeline(config: &RecordingConfig, profile: &EncoderProfile, outp
     
     // Get video source
     let video_source = if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        get_wayland_source().await?
+        get_wayland_source().await? 
     } else {
         get_x11_source(config)?
     };
 
-    // Note: Reverted audio muxing for now as it caused negotiation issues with pipewiresrc.
     Ok(format!(
         "{} ! videoconvert ! videorate ! queue ! {} {} ! {} ! filesink location=\"{}\"",
         video_source,
@@ -386,4 +450,155 @@ fn get_x11_source(config: &RecordingConfig) -> RecordResult<String> {
     }
 
     Ok(source)
+}
+
+async fn record_gif_rust(config: RecordingConfig) -> RecordResult<PathBuf> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+    
+    println!("Starting GIF recording (via FFmpeg Pipe)...");
+    
+    // Check if ffmpeg is available
+    if Command::new("ffmpeg").arg("-version").output().is_err() {
+        eprintln!("Error: ffmpeg not found!");
+        eprintln!("Please install ffmpeg to record GIFs:");
+        eprintln!("  sudo pacman -S ffmpeg");
+        eprintln!("  sudo apt install ffmpeg");
+        return Err(RecordError::NoEncoderFound);
+    }
+
+    // Build pipeline: Source -> videoconvert -> rgba -> appsink
+    let source_str = if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        get_wayland_source().await? 
+    } else {
+        get_x11_source(&config)?
+    };
+
+    let pipeline_str = format!(
+        "{} ! videoconvert ! videorate ! video/x-raw,format=RGBA,framerate=25/1 ! appsink name=sink emit-signals=true sync=false drop=false max-buffers=200",
+        source_str
+    );
+
+    let pipeline = gst::parse::launch(&pipeline_str)
+        .map_err(|e| RecordError::GStreamerError(format!("Failed to parse pipeline: {}", e)))
+        ?.downcast::<gst::Pipeline>()
+        .map_err(|_| RecordError::GStreamerError("Cast to Pipeline failed".into()))?;
+
+    let appsink = pipeline.by_name("sink")
+        .ok_or_else(|| RecordError::GStreamerError("AppSink not found".into()))? 
+        .downcast::<gst_app::AppSink>()
+        .map_err(|_| RecordError::GStreamerError("Cast to AppSink failed".into()))?;
+
+    // Start pipeline
+    pipeline.set_state(gst::State::Playing)
+        .map_err(|e| RecordError::GStreamerError(format!("Failed to start pipeline: {}", e)))?;
+
+    println!("Recording GIF... Press Ctrl+C to stop.");
+
+    // Handle Ctrl+C
+    let ctrl_c = tokio::signal::ctrl_c();
+    tokio::pin!(ctrl_c);
+
+    let mut stopping = false;
+    let mut ffmpeg_child: Option<std::process::Child> = None;
+    
+    loop {
+        tokio::select! {
+            _ = &mut ctrl_c => {
+                println!("\nStopping recording...");
+                stopping = true;
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(1)) => {
+                // Pull sample
+                match appsink.try_pull_sample(gst::ClockTime::from_mseconds(5)) {
+                    Some(sample) => {
+                        let buffer = sample.buffer().ok_or_else(|| RecordError::GStreamerError("No buffer in sample".into()))?;
+                        let map = buffer.map_readable().map_err(|_| RecordError::GStreamerError("Failed to map buffer".into()))?;
+                        
+                        // Initialize FFmpeg on first frame
+                        if ffmpeg_child.is_none() {
+                            let caps = sample.caps().ok_or_else(|| RecordError::GStreamerError("No caps".into()))?;
+                            let structure = caps.structure(0).ok_or_else(|| RecordError::GStreamerError("No structure".into()))?;
+                            let width = structure.get::<i32>("width").map_err(|_| RecordError::GStreamerError("No width".into()))? as u32;
+                            let height = structure.get::<i32>("height").map_err(|_| RecordError::GStreamerError("No height".into()))? as u32;
+
+                            println!("Detected stream: {}x{}", width, height);
+
+                            let child = Command::new("ffmpeg")
+                                .arg("-y") // Overwrite
+                                .arg("-loglevel").arg("warning")
+                                .arg("-nostats")
+                                .arg("-f").arg("rawvideo")
+                                .arg("-pix_fmt").arg("rgba")
+                                .arg("-s").arg(format!("{}x{}", width, height))
+                                .arg("-r").arg("25")
+                                .arg("-i").arg("pipe:0")
+                                // High quality GIF palette generation
+                                .arg("-vf").arg("split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
+                                .arg(&config.output_path)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::inherit())
+                                .spawn()
+                                .map_err(|e| RecordError::IoError(e))?;
+                            
+                            ffmpeg_child = Some(child);
+                        }
+
+                        // Write to FFmpeg stdin
+                        if let Some(child) = &mut ffmpeg_child {
+                            if let Some(stdin) = &mut child.stdin {
+                                if let Err(e) = stdin.write_all(map.as_slice()) {
+                                    // Broken pipe usually means ffmpeg exited
+                                    if e.kind() != std::io::ErrorKind::BrokenPipe {
+                                        eprintln!("Failed to write to ffmpeg: {}", e);
+                                    }
+                                    stopping = true;
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        // No data yet
+                    }
+                }
+            }
+        }
+        if stopping { break; }
+    }
+
+    // Stop pipeline
+    pipeline.set_state(gst::State::Null)
+        .map_err(|e| RecordError::GStreamerError(format!("Failed to stop pipeline: {}", e)))?;
+
+    // Close stdin to signal EOF to ffmpeg
+    if let Some(mut child) = ffmpeg_child {
+        drop(child.stdin.take()); // Close stdin
+        println!("Finalizing GIF (FFmpeg processing)...");
+        let status = child.wait().map_err(|e| RecordError::IoError(e))?;
+        
+        if !status.success() {
+            let code = status.code();
+            #[cfg(unix)]
+            let signal = {
+                use std::os::unix::process::ExitStatusExt;
+                status.signal()
+            };
+            #[cfg(not(unix))]
+            let signal = None;
+
+            // Signal 2 (SIGINT) is expected because Ctrl+C hits the whole process group.
+            // Some FFmpeg versions/filters return 255 or 130 on interruption.
+            let is_expected_interruption = signal == Some(2) || code == Some(255) || code == Some(130);
+
+            if !is_expected_interruption {
+                return Err(RecordError::GifError(format!("FFmpeg failed with status: {}", status)));
+            }
+        }
+    } else {
+        return Err(RecordError::GifError("No frames captured".into()));
+    }
+
+    println!("GIF saved to {:?}", config.output_path);
+    Ok(config.output_path)
 }

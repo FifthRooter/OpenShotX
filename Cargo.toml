@@ -9,6 +9,7 @@ x11rb = { version = "0.13.2", features = ["all-extensions"] }
 zbus = "5.11.0"  # for dbus/portal communication
 tokio = { version = "1.47.1", features = ["full"] }
 ashpd = { version = "0.11", default-features = false, features = ["tokio"] }
+url = "2.5"
 
 # GUI overlay for area selection (X11)
 gtk4 = "0.10"
@@ -24,7 +25,7 @@ serde_yml = "0.0.12"
 tracing = "0.1.41"
 futures-util = "0.3.31"
 async-trait = "0.1.89"
-image = { version = "0.24.9", features = ["png", "jpeg"] }
+image = { version = "0.24.9", features = ["png", "jpeg", "gif"] }
 chrono = "0.4"
 
 # OCR

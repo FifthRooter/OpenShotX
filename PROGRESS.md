@@ -11,6 +11,13 @@
   - Dynamic encoder selection (H.264, VP8, VP9, Theora)
   - Automatic fallback for missing codecs
   - Clean Ctrl+C finalization (EOS handling)
+- [x] **GIF Recording Support**:
+  - Implemented high-performance streaming pipe to FFmpeg.
+  - High-quality color quantization via `palettegen` filter.
+  - Robust handling of Ctrl+C interruption and process signals.
+- [x] **Clipboard Integration**:
+  - Automatically copies recorded GIF as a File URI (`text/uri-list`).
+  - Ensures compatibility with Discord, Slack, and browsers.
 - [x] Update `src/main.rs` with `record` subcommand
 - [x] Transition CLI to async runtime using `tokio`
 - [x] Update documentation with system requirements
