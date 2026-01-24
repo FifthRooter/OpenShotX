@@ -1,0 +1,341 @@
+use std::path::PathBuf;
+use thiserror::Error;
+use gst::prelude::*;
+use gstreamer as gst;
+
+#[derive(Debug, Error)]
+pub enum RecordError {
+    #[error("GStreamer initialization failed: {0}")]
+    InitError(String),
+    
+    #[error("GStreamer error: {0}")]
+    GStreamerError(String),
+    
+    #[error("Wayland portal error: {0}")]
+    PortalError(String),
+    
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    
+    #[error("Unsupported backend: {0}")]
+    UnsupportedBackend(String),
+
+    #[error("Cancelled by user")]
+    Cancelled,
+    
+    #[error("No suitable video encoder found. Please install gst-plugins-good/ugly/bad.")]
+    NoEncoderFound,
+}
+
+pub type RecordResult<T> = Result<T, RecordError>;
+
+#[derive(Debug, Clone)]
+pub struct RecordingConfig {
+    pub output_path: PathBuf,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+}
+
+impl Default for RecordingConfig {
+    fn default() -> Self {
+        let mut path = dirs::video_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push("output.mp4");
+        Self {
+            output_path: path,
+            width: None,
+            height: None,
+            x: None,
+            y: None,
+        }
+    }
+}
+
+struct EncoderProfile {
+    name: &'static str,
+    encoder: &'static str,
+    props: &'static str,
+    muxer: &'static str,
+    extension: &'static str,
+}
+
+// Priority list of encoders
+const PROFILES: &[EncoderProfile] = &[
+    // VP8 (WebM) - Prioritized fallback over H.264 if missing, and better than Theora
+    EncoderProfile {
+        name: "VP8", 
+        encoder: "vp8enc", 
+        props: "deadline=1", 
+        muxer: "webmmux", 
+        extension: "webm"
+    }, 
+    // VP9 (WebM)
+    EncoderProfile {
+        name: "VP9", 
+        encoder: "vp9enc", 
+        props: "deadline=1", 
+        muxer: "webmmux", 
+        extension: "webm"
+    },
+    // Standard H.264
+    EncoderProfile {
+        name: "H.264 (x264)", 
+        encoder: "x264enc", 
+        props: "speed-preset=ultrafast tune=zerolatency", 
+        muxer: "mp4mux", 
+        extension: "mp4"
+    },
+    // Cisco OpenH264
+    EncoderProfile {
+        name: "H.264 (OpenH264)", 
+        encoder: "openh264enc", 
+        props: "", 
+        muxer: "mp4mux", 
+        extension: "mp4"
+    },
+    // Theora (Ogg) - Last resort
+    EncoderProfile {
+        name: "Theora", 
+        encoder: "theoraenc", 
+        props: "", 
+        muxer: "oggmux", 
+        extension: "ogv"
+    },
+];
+
+/// Start a recording session
+pub async fn start_recording(config: RecordingConfig) -> RecordResult<()> {
+    // 1. Initialize GStreamer
+    gst::init().map_err(|e| RecordError::InitError(e.to_string()))?;
+
+    // 2. Select Encoder Profile
+    let (profile, final_path) = select_encoder(&config.output_path)?;
+    println!("Using Encoder: {} ({})", profile.name, profile.encoder);
+    
+    if final_path != config.output_path {
+        println!("Note: Output filename changed to match format: {:?}", final_path);
+    }
+
+    // 3. Build pipeline description
+    let pipeline_str = build_pipeline(&config, profile, &final_path).await?;
+    println!("Starting recording to: {:?}", final_path);
+
+    // 4. Create pipeline
+    let pipeline = gst::parse::launch(&pipeline_str)
+        .map_err(|e| RecordError::GStreamerError(format!("Failed to parse pipeline: {}", e)))
+        ?.downcast::<gst::Pipeline>()
+        .map_err(|_| RecordError::GStreamerError("Cast to Pipeline failed".into()))?;
+
+    // 5. Start playing
+    if let Err(err) = pipeline.set_state(gst::State::Playing) {
+        eprintln!("Failed to set pipeline to Playing: {}", err);
+        if let Some(bus) = pipeline.bus() {
+            while let Some(msg) = bus.pop() {
+                if let gst::MessageView::Error(err) = msg.view() {
+                    eprintln!("Detailed Error from {}: {}", 
+                        err.src().map(|s| s.name()).unwrap_or("unknown".into()), 
+                        err.error()
+                    );
+                    if let Some(debug) = err.debug() {
+                        eprintln!("Debug Info: {}", debug);
+                    }
+                }
+            }
+        }
+        let _ = pipeline.set_state(gst::State::Null);
+        return Err(RecordError::GStreamerError(format!("State change failed: {}", err)));
+    }
+
+    // 6. Watch for messages and Ctrl+C
+    let bus = pipeline.bus().ok_or_else(|| RecordError::GStreamerError("Pipeline has no bus".into()))?;
+    
+    println!("Recording... Press Ctrl+C to stop.");
+
+    // Handle Ctrl+C
+    let ctrl_c = tokio::signal::ctrl_c();
+    tokio::pin!(ctrl_c);
+    
+    // Phase 1: Recording until Ctrl+C or Error
+    let mut stopping = false;
+    loop {
+        tokio::select! {
+            _ = &mut ctrl_c => {
+                println!("\nStopping recording... Finalizing file...");
+                pipeline.send_event(gst::event::Eos::new());
+                stopping = true;
+                break;
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                // Poll bus
+                for msg in bus.iter_timed(gst::ClockTime::ZERO) {
+                    use gst::MessageView;
+                    match msg.view() {
+                        MessageView::Eos(..) => {
+                            println!("End of stream reached (unexpected).");
+                            stopping = true;
+                            break;
+                        }
+                        MessageView::Error(err) => {
+                            eprintln!("Error from element {:?}: {}", err.src().map(|s| s.name()), err.error());
+                            let _ = pipeline.set_state(gst::State::Null);
+                            return Err(RecordError::GStreamerError(err.error().to_string()));
+                        }
+                        _ => (),
+                    }
+                }
+                if stopping { break; }
+            }
+        }
+    }
+
+    // Phase 2: Wait for EOS if we initiated stop
+    if stopping {
+        let start_wait = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(5); // 5s timeout for finalization
+        
+        loop {
+            if start_wait.elapsed() > timeout {
+                eprintln!("Timeout waiting for EOS. Forcing stop.");
+                break;
+            }
+
+            // Check bus
+            let mut eos_received = false;
+            for msg in bus.iter_timed(gst::ClockTime::from_mseconds(100)) {
+                use gst::MessageView;
+                match msg.view() {
+                    MessageView::Eos(..) => {
+                        println!("File finalized successfully.");
+                        eos_received = true;
+                        break;
+                    }
+                    MessageView::Error(err) => {
+                        eprintln!("Error during finalization: {}", err.error());
+                        eos_received = true; // Stop waiting
+                        break;
+                    }
+                    _ => (),
+                }
+            }
+            if eos_received { break; }
+        }
+    }
+
+    // 7. Cleanup
+    pipeline.set_state(gst::State::Null)
+        .map_err(|e| RecordError::GStreamerError(format!("Failed to set state to Null: {}", e)))?;
+
+    println!("Recording saved to {:?}", final_path);
+    if let Ok(metadata) = std::fs::metadata(&final_path) {
+        println!("File size: {:.2} MB", metadata.len() as f64 / 1024.0 / 1024.0);
+    }
+    Ok(())
+}
+
+fn select_encoder(requested_path: &PathBuf) -> RecordResult<(&'static EncoderProfile, PathBuf)> {
+    // Check for x264enc first to warn user if missing
+    if gst::ElementFactory::find("x264enc").is_none() {
+        println!("\n\x1b[33mWARNING: H.264 encoder (x264enc) not found!\x1b[0m");
+        println!("Falling back to inferior encoders (Theora/VP8). For high-quality MP4 recording, please install:");
+        println!("  Ubuntu/Debian: \x1b[1msudo apt install gstreamer1.0-plugins-ugly\x1b[0m");
+        println!("  Arch:          \x1b[1msudo pacman -S gst-plugins-ugly\x1b[0m");
+        println!("  Fedora:        \x1b[1msudo dnf install gstreamer1-plugins-ugly-free\x1b[0m\n");
+    }
+
+    if let Some(ext) = requested_path.extension().and_then(|s| s.to_str()) {
+        for profile in PROFILES {
+            if profile.extension == ext {
+                if gst::ElementFactory::find(profile.encoder).is_some() && 
+                   gst::ElementFactory::find(profile.muxer).is_some() {
+                    return Ok((profile, requested_path.clone()));
+                }
+            }
+        }
+        println!("Warning: Requested format '{}' not supported or encoder missing.", ext);
+    }
+
+    for profile in PROFILES {
+        if gst::ElementFactory::find(profile.encoder).is_some() && 
+           gst::ElementFactory::find(profile.muxer).is_some() {
+            let mut new_path = requested_path.clone();
+            new_path.set_extension(profile.extension);
+            return Ok((profile, new_path));
+        }
+    }
+
+    Err(RecordError::NoEncoderFound)
+}
+
+async fn build_pipeline(config: &RecordingConfig, profile: &EncoderProfile, output_path: &PathBuf) -> RecordResult<String> {
+    let output_str = output_path.to_string_lossy();
+    // Simplified pipeline with rate normalization
+    // always-copy=true in source should fix negotiation issues.
+    let encoding_part = format!(
+        "videoconvert ! videorate ! queue ! {} {} ! {} ! filesink location=\"{}\"",
+        profile.encoder, profile.props, profile.muxer, output_str
+    );
+
+    // Check for Wayland
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        build_wayland_pipeline(&encoding_part).await
+    } else {
+        // Assume X11
+        build_x11_pipeline(config, &encoding_part)
+    }
+}
+
+async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
+    use ashpd::desktop::screencast::{Screencast, CursorMode, SourceType};
+    use ashpd::desktop::PersistMode;
+
+    println!("Requesting Wayland ScreenCast session...");
+    
+    let proxy = Screencast::new().await
+        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+
+    let session = proxy.create_session().await
+        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+
+    proxy.select_sources(
+        &session,
+        CursorMode::Embedded,
+        SourceType::Monitor | SourceType::Window,
+        false, // multiple
+        None,
+        PersistMode::DoNot,
+    ).await.map_err(|e| RecordError::PortalError(e.to_string()))?;
+
+    println!("Please select a screen or window to record...");
+    let request = proxy.start(&session, None).await
+        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+        
+    let response = request.response()
+        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+
+    let stream = response.streams().first()
+        .ok_or_else(|| RecordError::PortalError("No streams returned".into()))?;
+
+    let node_id = stream.pipe_wire_node_id();
+    println!("Got PipeWire Node ID: {}", node_id);
+
+    // pipeline: pipewiresrc -> queue -> [encoding_part]
+    // do-timestamp=true is vital for non-timestamped sources
+    Ok(format!(
+        "pipewiresrc path={} do-timestamp=true ! queue ! {}",
+        node_id, encoding_part
+    ))
+}
+
+fn build_x11_pipeline(config: &RecordingConfig, encoding_part: &str) -> RecordResult<String> {
+    let mut source_props = String::from("ximagesrc show-pointer=true use-damage=false");
+    
+    if let (Some(x), Some(y), Some(w), Some(h)) = (config.x, config.y, config.width, config.height) {
+        source_props.push_str(&format!(" startx={} starty={} endx={} endy={}", x, y, x + w as i32 - 1, y + h as i32 - 1));
+    }
+
+    Ok(format!(
+        "{} ! queue ! {}",
+        source_props, encoding_part
+    ))
+}

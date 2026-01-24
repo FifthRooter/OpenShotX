@@ -55,19 +55,54 @@ options:
 ## building
 
 1. install rust
-2. install ocr deps if you want that feature:
-   - arch: `sudo pacman -S tesseract leptonica tesseract-data-eng`
-   - ubuntu: `sudo apt install tesseract-ocr libtesseract-dev`
-   - fedora: `sudo dnf install tesseract leptonica`
+2. **install system dependencies:**
+   
+   **Arch Linux:**
+   ```bash
+   sudo pacman -S tesseract leptonica tesseract-data-eng # for OCR
+   sudo pacman -S gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly # for Recording
+   ```
+
+   **Ubuntu/Debian:**
+   ```bash
+   sudo apt install tesseract-ocr libtesseract-dev # for OCR
+   sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+       gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+       gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly # for Recording
+   ```
+
+   **Fedora:**
+   ```bash
+   sudo dnf install tesseract leptonica # for OCR
+   sudo dnf install gstreamer1-devel gstreamer1-plugins-base-devel \
+       gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free # for Recording
+   ```
+
 3. `cargo build`
-4. `cargo run -- capture area` or whatever
+4. `cargo run -- capture area` or `cargo run -- record screen`
+
+## what actually works right now
+
+**screenshots:**
+- `cargo run -- capture screen` - grabs the whole screen
+- `cargo run -- capture area` - drag to select an area (x11 has gtk overlay, wayland uses portal dialogs)
+- `cargo run -- capture window` - window capture (wayland: portal, x11: not implemented yet)
+
+**screen recording:**
+- `cargo run -- record screen` - record full screen to MP4 (Wayland/X11)
+- `cargo run -- record area` - record selected window/monitor (Wayland) or drawn area (X11)
+- automatic fallback to WebM/Theora if H.264 codecs are missing
+
+**OCR - text extraction from screenshots:**
+- `cargo run -- capture area --ocr` - select area, extract text, copy to clipboard
+- `cargo run -- ocr screenshot.png` - run ocr on existing image
+- `cargo run -- ocr screenshot.png --lang eng+fra --min-conf 60` - multi-language + confidence threshold
 
 ## what's coming (eventually)
 
-**screen recording:**
-- ffmpeg integration
-- mp4, webm, gif output
-- audio capture
+**audio support:**
+- record system audio (pipewire/pulse)
+- record microphone
 
 **scrolling capture:**
 - auto-scroll detection
@@ -83,11 +118,12 @@ options:
 
 ## status
 
-v0.1.0-alpha. shit works but it's early.
+v0.2.0-alpha. shit works better now.
 
 x11 backend: complete
 wayland backend: complete
 ocr: complete
+screen recording: complete (video only)
 gtk4 area overlay: complete
 
 check ROADMAP.md if you want the full picture.

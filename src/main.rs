@@ -4,6 +4,8 @@
 //!   cargo run -- capture screen
 //!   cargo run -- capture area
 //!   cargo run -- capture window
+//!   cargo run -- record screen
+//!   cargo run -- record area
 //!   cargo run -- ocr <image>
 
 use cleanshitx::{
@@ -11,10 +13,12 @@ use cleanshitx::{
     capture::{save_capture, SaveConfig, ImageFormat},
     select_area,
     ocr::{extract_text_from_path, OcrConfig},
+    recording::{RecordingConfig, start_recording},
 };
 use std::path::PathBuf;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
@@ -30,6 +34,17 @@ fn main() {
                 std::process::exit(1);
             }
             run_capture(&args);
+        }
+        "record" => {
+            if args.len() < 3 {
+                eprintln!("Error: missing recording type");
+                print_usage();
+                std::process::exit(1);
+            }
+            if let Err(e) = run_record(&args).await {
+                eprintln!("Recording failed: {}", e);
+                std::process::exit(1);
+            }
         }
         "ocr" => {
             if args.len() < 3 {
@@ -55,6 +70,7 @@ fn print_usage() {
     println!();
     println!("Commands:");
     println!("  capture <type>    Capture a screenshot");
+    println!("  record <type>     Record video (MP4)");
     println!("  ocr <image>       Extract text from an image");
     println!();
     println!("Capture types:");
@@ -69,18 +85,14 @@ fn print_usage() {
     println!("  --prefix <text>   Prefix for filename (default: 'screenshot')");
     println!("  --ocr             Run OCR on captured image and copy to clipboard");
     println!();
-    println!("OCR options:");
-    println!("  --lang <code>     Language(s) for OCR (default: eng)");
-    println!("                    Examples: eng, eng+fra, eng+fra+deu");
-    println!("  --min-conf <n>    Minimum confidence threshold (default: 50)");
-    println!("  --no-clipboard    Don't copy to clipboard");
+    println!("Recording options:");
+    println!("  --output <path>   Save to specific path (default: ~/Videos/output.mp4)");
+    // Audio options would go here
     println!();
     println!("Examples:");
     println!("  cargo run -- capture screen");
-    println!("  cargo run -- capture screen --output ~/Desktop/test.png");
-    println!("  cargo run -- capture screen --ocr");
-    println!("  cargo run -- ocr screenshot.png");
-    println!("  cargo run -- ocr screenshot.png --lang eng+fra --min-conf 60");
+    println!("  cargo run -- record screen");
+    println!("  cargo run -- record area --output my_video.mp4");
 }
 
 fn run_capture(args: &[String]) {
@@ -382,4 +394,67 @@ fn run_ocr(args: &[String]) {
             std::process::exit(1);
         }
     }
+}
+
+async fn run_record(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let record_type = args[2].as_str();
+    let mut output_path: Option<PathBuf> = None;
+
+    let mut i = 3;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--output" => {
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --output requires a path");
+                    std::process::exit(1);
+                }
+                output_path = Some(PathBuf::from(&args[i + 1]));
+                i += 2;
+            }
+            _ => {
+                eprintln!("Error: unknown option '{}'", args[i]);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let mut config = RecordingConfig::default();
+    if let Some(p) = output_path {
+        config.output_path = p;
+    }
+
+    // Handle area selection if needed
+    if record_type == "area" {
+        // If on X11, launch overlay
+        if std::env::var("WAYLAND_DISPLAY").is_err() && X11Backend::is_supported() {
+             println!("Select an area to record by dragging the mouse. Press ESC to cancel.");
+             // Note: select_area is sync (uses GTK loop). 
+             // Since we are in an async task, this might block the runtime, 
+             // but since it's the main task and we await nothing else yet, it's fine.
+             // Ideally we'd spawn_blocking, but GTK must run on main thread often.
+             // Actually, since we used #[tokio::main], the main thread is driving the runtime.
+             // Running GTK main loop inside an async function on the main thread might be tricky 
+             // if tokio also wants to run.
+             // However, `select_area` creates a new context/loop. It should work.
+             
+             let selection = select_area().map_err(|e| format!("Selection failed: {}", e))?;
+             if let Some(area) = selection {
+                 config.x = Some(area.x);
+                 config.y = Some(area.y);
+                 config.width = Some(area.width as u32);
+                 config.height = Some(area.height as u32);
+             } else {
+                 println!("Selection cancelled.");
+                 return Ok(());
+             }
+        } else {
+            // Wayland area = portal selection (handled in start_recording)
+            println!("Wayland detected: 'area' recording triggers system screen/window selection.");
+        }
+    } else if record_type != "screen" {
+         eprintln!("Error: recording type '{}' not supported (use 'screen' or 'area')", record_type);
+         std::process::exit(1);
+    }
+
+    start_recording(config).await.map_err(|e| e.into())
 }
