@@ -1,60 +1,36 @@
 # Next Session
 
-*Previous task (Screen Recording logic) implemented.*
+*Previous task (Screen Recording) successfully verified.*
 
 ## Current State
 
-**Last commit:** (uncommitted Recording changes)
-**Branch:** feat/screen-recording
+**Last commit:** feat(recording): implement screen recording with GStreamer
+**Branch:** feat/screen-recording (ready to merge)
 
 ## Completed
 
-- **OCR Module**: Full text extraction support ✓
-- **Recording Module**:
-  - Scaffolding: `src/recording/mod.rs`
-  - Engine: **GStreamer** (replaced FFmpeg plan)
-  - Wayland: `ashpd` Portal -> PipeWire Node ID -> `pipewiresrc`
-  - X11: `ximagesrc` with area support
-  - CLI: `cargo run -- record screen|area`
-  - Async Runtime: `tokio` integrated into `main.rs`
+- **Screen Recording (Video)**:
+  - GStreamer pipeline with PipeWire (Wayland) and XImage (X11) support.
+  - Automatic encoder selection (x264 > VP8 > Theora).
+  - Robust handling of missing codecs (helpful error messages).
+  - Validated MP4 recording on Wayland.
+- **OCR Module**: Full text extraction.
 
-## Build Requirements (NEW)
+## Next Session: Audio Support & Polish
 
-**System Dependencies (GStreamer):**
-To build the new recording module, you must install GStreamer development libraries:
+### Priority 1: Audio Capture
+- [ ] Add `pulsesrc` (PulseAudio/PipeWire audio) to the pipeline.
+- [ ] Mux audio stream into MP4/WebM container.
+- [ ] Add CLI flag `--audio` or `--mic`.
 
-```bash
-# Ubuntu/Debian
-sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-    libgstreamer-plugins-bad1.0-dev
+### Priority 2: Configuration
+- [ ] Implement YAML config to save preferences (e.g., default encoder, path).
 
-# Arch
-sudo pacman -S gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly
-
-# Fedora
-sudo dnf install gstreamer1-devel gstreamer1-plugins-base-devel
-```
-
-## Next Session: Verification & Polish
-
-### Priority 1: Verify Recording
-- [ ] Build project (ensure GStreamer links)
-- [ ] Test X11 recording (`record area`)
-- [ ] Test Wayland recording (`record screen`)
-- [ ] Verify `Ctrl+C` cleanly stops and finalizes MP4
-
-### Priority 2: Audio Support (Deferred)
-- [ ] Add `pulsesrc` to pipeline
-- [ ] Sync audio/video streams
-
-### Priority 3: Config System
-- [ ] YAML config implementation
+### Priority 3: Merge & Release
+- [ ] Merge `feat/screen-recording` to `main`.
+- [ ] Tag v0.2.0-alpha.
 
 ## Notes
 
-**Key Decisions:**
-1. **Engine Swap:** Switched to GStreamer for robust PipeWire support.
-2. **Wayland Area:** Uses Portal Window/Screen selection (system dialog) instead of custom drag overlay.
-3. **Video Only:** Audio deferred to ensure video stability first.
+**Build Requirements:**
+Ensure GStreamer plugins are installed (see README).

@@ -2,6 +2,23 @@
 
 ## Completed
 
+### Phase 7: Screen Recording (v0.2.0)
+- [x] Add `gstreamer`, `gstreamer-app`, and `gstreamer-video` dependencies
+- [x] Create `src/recording/mod.rs` with:
+  - GStreamer pipeline abstraction
+  - Wayland support via `ashpd` (PipeWire)
+  - X11 support via `ximagesrc`
+  - Dynamic encoder selection (H.264, VP8, VP9, Theora)
+  - Automatic fallback for missing codecs
+  - Clean Ctrl+C finalization (EOS handling)
+- [x] Update `src/main.rs` with `record` subcommand
+- [x] Transition CLI to async runtime using `tokio`
+- [x] Update documentation with system requirements
+
+**System Requirements for Recording:**
+- Arch: `sudo pacman -S gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly`
+- Ubuntu: `sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly`
+
 ### Phase 6: OCR Module
 - [x] Add tesseract-rs and arboard dependencies
 - [x] Create `src/ocr/mod.rs` module with:

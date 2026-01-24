@@ -116,12 +116,12 @@ Methods:
 - [x] Save to ~/Pictures with better naming
 
 ### 2. Recording (v0.2.0)
-- [ ] Screen recording (GStreamer integration) **IN PROGRESS**
+- [x] Screen recording (GStreamer integration) ✓ **COMPLETE**
   - [x] Engine Swap: FFmpeg -> GStreamer (Better Wayland support)
-  - [ ] Wayland: PipeWire source via portals
-  - [ ] X11: XImage source
-  - [ ] Output: MP4 (H.264)
-- [ ] Audio capture support (Deferred to v0.3)
+  - [x] Wayland: PipeWire source via portals
+  - [x] X11: XImage source
+  - [x] Output: MP4 (H.264) with fallback to WebM
+- [ ] Audio capture support (Priority 1 for v0.3)
 - [ ] GIF mode with optimization
 - [ ] Basic video trimming
 
