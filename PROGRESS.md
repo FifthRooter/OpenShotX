@@ -15,6 +15,12 @@
 - [x] Transition CLI to async runtime using `tokio`
 - [x] Update documentation with system requirements
 
+### Phase 8: Wayland Region Fix (Critical)
+- [x] Implement manual DBus handling for `Start` request
+- [x] Bypass `ashpd` enum deserialization to support `SourceType: 16`
+- [x] Fix `invalid value: 16` crash on Region selection
+- [x] Validate interactive Region recording on Wayland
+
 **System Requirements for Recording:**
 - Arch: `sudo pacman -S gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly`
 - Ubuntu: `sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly`

@@ -1,5 +1,7 @@
 use std::path::PathBuf;
+use std::collections::HashMap;
 use thiserror::Error;
+use zbus::zvariant::OwnedValue;
 use gst::prelude::*;
 use gstreamer as gst;
 
@@ -286,8 +288,8 @@ async fn build_pipeline(config: &RecordingConfig, profile: &EncoderProfile, outp
 }
 
 async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
-    use ashpd::desktop::screencast::{Screencast, CursorMode, SourceType};
-    use ashpd::desktop::PersistMode;
+    use ashpd::desktop::screencast::Screencast;
+    use zbus::zvariant::Value;
 
     println!("Requesting Wayland ScreenCast session...");
     
@@ -297,26 +299,46 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
     let session = proxy.create_session().await
         .map_err(|e| RecordError::PortalError(e.to_string()))?;
 
+    let connection = proxy.connection();
+
+    // 1. Select Sources (Use standard ashpd call to avoid "Unsupported device type" errors)
     proxy.select_sources(
         &session,
-        CursorMode::Embedded,
-        SourceType::Monitor | SourceType::Window,
+        ashpd::desktop::screencast::CursorMode::Embedded,
+        ashpd::desktop::screencast::SourceType::Monitor | ashpd::desktop::screencast::SourceType::Window,
         false, // multiple
         None,
-        PersistMode::DoNot,
+        ashpd::desktop::PersistMode::DoNot,
     ).await.map_err(|e| RecordError::PortalError(e.to_string()))?;
 
     println!("Please select a screen or window to record...");
-    let request = proxy.start(&session, None).await
-        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+    
+    // 2. Start (Manual)
+    let msg = connection.call_method(
+        Some("org.freedesktop.portal.Desktop"),
+        "/org/freedesktop/portal/desktop",
+        Some("org.freedesktop.portal.ScreenCast"),
+        "Start",
+        &(&session, "", HashMap::<String, Value>::new()),
+    ).await.map_err(|e| RecordError::PortalError(format!("Start call failed: {}", e)))?;
+    
+    let request_path: zbus::zvariant::OwnedObjectPath = msg.body().deserialize()
+        .map_err(|e| RecordError::PortalError(format!("Failed to parse Start response: {}", e)))?;
         
-    let response = request.response()
-        .map_err(|e| RecordError::PortalError(e.to_string()))?;
+    let results: HashMap<String, OwnedValue> = wait_for_response(connection, &request_path).await?;
 
-    let stream = response.streams().first()
+    let streams_value = results.get("streams")
+        .ok_or_else(|| RecordError::PortalError("No streams in portal response".into()))?;
+
+    // streams signature: a(ua{sv})
+    let streams: Vec<(u32, HashMap<String, OwnedValue>)> = streams_value.try_clone().unwrap()
+        .try_into()
+        .map_err(|e| RecordError::PortalError(format!("Invalid streams format: {}", e)))?;
+
+    let stream = streams.first()
         .ok_or_else(|| RecordError::PortalError("No streams returned".into()))?;
 
-    let node_id = stream.pipe_wire_node_id();
+    let node_id = stream.0;
     println!("Got PipeWire Node ID: {}", node_id);
 
     // pipeline: pipewiresrc -> queue -> [encoding_part]
@@ -325,6 +347,41 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
         "pipewiresrc path={} do-timestamp=true ! queue ! {}",
         node_id, encoding_part
     ))
+}
+
+async fn wait_for_response(
+    connection: &zbus::Connection, 
+    path: &zbus::zvariant::ObjectPath<'_>
+) -> RecordResult<HashMap<String, OwnedValue>> {
+    use futures_util::StreamExt;
+    
+    let match_rule = format!(
+        "type='signal',interface='org.freedesktop.portal.Request',member='Response',path='{}'",
+        path
+    );
+    
+    let rule: zbus::MatchRule = match_rule.as_str().try_into()
+        .map_err(|e| RecordError::PortalError(format!("Invalid match rule: {}", e)))?;
+
+    let mut stream = zbus::MessageStream::for_match_rule(
+        rule,
+        connection,
+        Some(1),
+    ).await.map_err(|e| RecordError::PortalError(format!("Failed to create message stream: {}", e)))?;
+
+    let message = stream.next().await
+        .ok_or_else(|| RecordError::PortalError("No response from portal".into()))?
+        .map_err(|e| RecordError::PortalError(format!("Signal error: {}", e)))?;
+
+    // Response signal signature: (ua{sv})
+    let (status, results): (u32, HashMap<String, OwnedValue>) = message.body().deserialize()
+        .map_err(|e| RecordError::PortalError(format!("Failed to deserialize portal response: {}", e)))?;
+
+    if status != 0 {
+        return Err(RecordError::Cancelled);
+    }
+    
+    Ok(results)
 }
 
 fn build_x11_pipeline(config: &RecordingConfig, encoding_part: &str) -> RecordResult<String> {

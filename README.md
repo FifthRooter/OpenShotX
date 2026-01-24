@@ -44,6 +44,7 @@ options:
 
 **wayland backend:**
 - uses xdg-desktop-portal via ashpd
+- manual DBus implementation to support modern portal features (Region recording)
 - works on hyprland, kde, sway, gnome
 - security note: wayland doesn't let programs just capture whatever they want. area/window capture go through portal dialogs. this is a feature, not a bug.
 
