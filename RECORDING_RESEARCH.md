@@ -57,6 +57,26 @@ Implement screen recording (screen, area, window) for both Wayland and X11, supp
 - `cargo run -- record screen`
 - `cargo run -- record area` (Requires overlay to get coordinates for X11 crop, or portal for Wayland)
 
-## Future Considerations
-- **Audio:** Add `pulsesrc` or `pipewiresrc` (for audio) to the pipeline + `audiomixer`.
-- **Formats:** Switch encoders (`vp8enc`/`vp9enc` for WebM).
+## Audio Recording (Attempted v0.2.0)
+
+### Implementation Attempt
+Attempted to add audio capture using `pulsesrc` muxed into the video pipeline.
+Pipeline structure:
+```
+{muxer} name=mux ! filesink location={path}
+{video_source} ! videoconvert ! videorate ! queue ! {video_encoder} ! mux.
+pulsesrc ! audioconvert ! audioresample ! queue ! {audio_encoder} ! mux.
+```
+
+### Issues Encountered
+1. **Unhandled Format Error:** `pipewiresrc` reported `stream error: unhandled format` immediately after adding the audio branch. This likely indicates a negotiation conflict between the two branches when muxing, or a PipeWire session contention.
+2. **Encoder Availability:** Common AAC encoders like `voaacenc` and `avenc_aac` were missing on the test system. `faac` was available but the negotiation issues persisted.
+3. **Resource Contention:** Recording audio triggered "corking" (pausing) of other media players on the system.
+
+### Potential Solutions
+- **Caps Negotiation:** Explicitly define caps between `pipewiresrc` and `videoconvert` (e.g., `video/x-raw(memory:DmaBuf)` or `video/x-raw`).
+- **Separate Recording:** Record audio to a temp file and mux later (avoids real-time muxing complexity but adds latency/post-processing).
+- **PipeWire Audio:** Use `pipewiresrc` for audio as well, potentially leveraging the same session if supported.
+- **Dynamic Probing:** Implement better probing for available audio encoders.
+
+*Status: Deferred to future version.*

@@ -87,7 +87,6 @@ fn print_usage() {
     println!();
     println!("Recording options:");
     println!("  --output <path>   Save to specific path (default: ~/Videos/output.mp4)");
-    // Audio options would go here
     println!();
     println!("Examples:");
     println!("  cargo run -- capture screen");

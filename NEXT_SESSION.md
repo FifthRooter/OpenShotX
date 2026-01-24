@@ -1,6 +1,6 @@
 # Next Session
 
-*Previous task (Region Recording) verified on Wayland.*
+*Previous task (Region Recording Fix) verified on Wayland.*
 
 ## Current State
 
@@ -17,28 +17,18 @@
   - **Fixed Wayland Region Recording**: Implemented manual DBus handling to bypass `ashpd` crash on "Region" selection.
 - **OCR Module**: Full text extraction.
 
-## Next Session: Audio & Config
+## Next Session: Configuration & Polish
 
-### Priority 1: Audio Capture
-- [ ] Add `pulsesrc` (PulseAudio/PipeWire audio) to the pipeline.
-- [ ] Mux audio stream into MP4/WebM container.
-- [ ] Add CLI flag `--audio` or `--mic`.
-
-### Priority 2: Configuration
+### Priority 1: Configuration
 - [ ] Implement YAML config to save preferences (e.g., default encoder, path).
 
-### Priority 3: Merge & Release
-- [ ] Merge `feat/screen-recording` to `main`.
-- [ ] Tag v0.2.0-alpha.
-
-### Priority 2: Configuration
-- [ ] Implement YAML config to save preferences (e.g., default encoder, path).
-
-### Priority 3: Merge & Release
+### Priority 2: Merge & Release
 - [ ] Merge `feat/screen-recording` to `main`.
 - [ ] Tag v0.2.0-alpha.
 
 ## Notes
+
+**Audio Recording:** Attempted but deferred due to `unhandled format` GStreamer errors and PulseAudio contention. See `RECORDING_RESEARCH.md` for details.
 
 **Build Requirements:**
 Ensure GStreamer plugins are installed (see README).

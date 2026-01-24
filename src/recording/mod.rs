@@ -271,23 +271,23 @@ fn select_encoder(requested_path: &PathBuf) -> RecordResult<(&'static EncoderPro
 
 async fn build_pipeline(config: &RecordingConfig, profile: &EncoderProfile, output_path: &PathBuf) -> RecordResult<String> {
     let output_str = output_path.to_string_lossy();
-    // Simplified pipeline with rate normalization
-    // always-copy=true in source should fix negotiation issues.
-    let encoding_part = format!(
-        "videoconvert ! videorate ! queue ! {} {} ! {} ! filesink location=\"{}\"",
-        profile.encoder, profile.props, profile.muxer, output_str
-    );
-
-    // Check for Wayland
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        build_wayland_pipeline(&encoding_part).await
+    
+    // Get video source
+    let video_source = if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        get_wayland_source().await?
     } else {
-        // Assume X11
-        build_x11_pipeline(config, &encoding_part)
-    }
+        get_x11_source(config)?
+    };
+
+    // Note: Reverted audio muxing for now as it caused negotiation issues with pipewiresrc.
+    Ok(format!(
+        "{} ! videoconvert ! videorate ! queue ! {} {} ! {} ! filesink location=\"{}\"",
+        video_source,
+        profile.encoder, profile.props, profile.muxer, output_str
+    ))
 }
 
-async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
+async fn get_wayland_source() -> RecordResult<String> {
     use ashpd::desktop::screencast::Screencast;
     use zbus::zvariant::Value;
 
@@ -301,7 +301,7 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
 
     let connection = proxy.connection();
 
-    // 1. Select Sources (Use standard ashpd call to avoid "Unsupported device type" errors)
+    // 1. Select Sources
     proxy.select_sources(
         &session,
         ashpd::desktop::screencast::CursorMode::Embedded,
@@ -313,7 +313,7 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
 
     println!("Please select a screen or window to record...");
     
-    // 2. Start (Manual)
+    // 2. Start
     let msg = connection.call_method(
         Some("org.freedesktop.portal.Desktop"),
         "/org/freedesktop/portal/desktop",
@@ -330,7 +330,6 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
     let streams_value = results.get("streams")
         .ok_or_else(|| RecordError::PortalError("No streams in portal response".into()))?;
 
-    // streams signature: a(ua{sv})
     let streams: Vec<(u32, HashMap<String, OwnedValue>)> = streams_value.try_clone().unwrap()
         .try_into()
         .map_err(|e| RecordError::PortalError(format!("Invalid streams format: {}", e)))?;
@@ -341,12 +340,7 @@ async fn build_wayland_pipeline(encoding_part: &str) -> RecordResult<String> {
     let node_id = stream.0;
     println!("Got PipeWire Node ID: {}", node_id);
 
-    // pipeline: pipewiresrc -> queue -> [encoding_part]
-    // do-timestamp=true is vital for non-timestamped sources
-    Ok(format!(
-        "pipewiresrc path={} do-timestamp=true ! queue ! {}",
-        node_id, encoding_part
-    ))
+    Ok(format!("pipewiresrc path={} do-timestamp=true", node_id))
 }
 
 async fn wait_for_response(
@@ -384,15 +378,12 @@ async fn wait_for_response(
     Ok(results)
 }
 
-fn build_x11_pipeline(config: &RecordingConfig, encoding_part: &str) -> RecordResult<String> {
-    let mut source_props = String::from("ximagesrc show-pointer=true use-damage=false");
+fn get_x11_source(config: &RecordingConfig) -> RecordResult<String> {
+    let mut source = String::from("ximagesrc show-pointer=true use-damage=false");
     
     if let (Some(x), Some(y), Some(w), Some(h)) = (config.x, config.y, config.width, config.height) {
-        source_props.push_str(&format!(" startx={} starty={} endx={} endy={}", x, y, x + w as i32 - 1, y + h as i32 - 1));
+        source.push_str(&format!(" startx={} starty={} endx={} endy={}", x, y, x + w as i32 - 1, y + h as i32 - 1));
     }
 
-    Ok(format!(
-        "{} ! queue ! {}",
-        source_props, encoding_part
-    ))
+    Ok(source)
 }

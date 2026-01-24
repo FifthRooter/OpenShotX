@@ -100,6 +100,7 @@
 - [ ] Config system (YAML via `serde_yml`)
 - [ ] Multi-monitor support
 - [ ] CLI hotkey integration
+- [ ] Audio Capture (v0.2.x - encountered negotiation issues)
 
 ## Notes
 
