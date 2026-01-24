@@ -104,6 +104,8 @@ options:
 4. `cargo run -- capture area` or `cargo run -- record screen --gif`
 
 ## what's coming (eventually)
+hotkeys - right now everything's run from the terminal, but the plan is to be able to configure the shortcuts and run 
+everything from those. right now just burning through the features i want to get a mvp and then polish it.
 
 **audio support:**
 doesn't work yet, audio is not a priority
@@ -124,13 +126,13 @@ doesn't work yet, audio is not a priority
 
 things are starting to work
 
-x11 backend: complete
+x11 backend: complete (needs to be tested on x11, haven't done that myself)
 wayland backend: complete
 ocr: complete
 screen recording: complete (MP4/WebM/GIF)
 gtk4 area overlay: complete
 
-check ROADMAP.md if you want the full picture.
+check ROADMAP.md if you want the full picture. i build and test everything on Arch+Hyprland setup, so it's very much a 'it works on my machine' situation fyi.
 
 ## license
 
