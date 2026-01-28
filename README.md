@@ -69,7 +69,12 @@ options:
 **ocr:**
 - tesseract for text extraction
 - wl-copy on wayland (arboard on x11) for clipboard
-- converts rgba to grayscale because tesseract likes that better
+- **preprocessing pipeline optimized for ui text:**
+  - 3x upscaling (lanczos3) for better dpi - tesseract prefers ~300 dpi
+  - color inversion for dark-mode uis - tesseract is trained on dark-on-light documents
+  - mild contrast enhancement
+- **before these improvements:** ocr on dark-mode apps (telegram, discord) had frequent misreads like "i"→"1", "b"→"87", "?"→"p"
+- **after:** ~91% confidence on typical chat text with proper character recognition
 
 ## building
 

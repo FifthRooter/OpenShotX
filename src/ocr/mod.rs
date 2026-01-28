@@ -106,23 +106,130 @@ pub struct OcrOutput {
     pub copied_to_clipboard: bool,
 }
 
-/// Convert RGBA image to grayscale (luma) format for Tesseract
-///
-/// Tesseract works best with grayscale images. This function converts
-/// RGBA to Luma8 by using the standard luminance formula:
-/// L = 0.299*R + 0.587*G + 0.114*B
-fn rgba_to_luma(image: &RgbaImage) -> Vec<u8> {
-    let mut luma_data = Vec::with_capacity((image.width() * image.height()) as usize);
+/// OCR preprocessing settings
+#[derive(Debug, Clone)]
+struct PreprocessConfig {
+    /// Scale factor for upscaling (2.0-4.0 recommended)
+    /// Tesseract works best at ~300 DPI equivalent
+    scale_factor: f32,
 
-    for pixel in image.pixels() {
+    /// Contrast enhancement factor (1.0 = none, >1.0 = more contrast)
+    contrast: f32,
+
+    /// Apply adaptive thresholding for better text separation
+    threshold: bool,
+}
+
+impl Default for PreprocessConfig {
+    fn default() -> Self {
+        Self {
+            scale_factor: 3.0,
+            contrast: 1.1,  // Mild contrast enhancement (was 1.5, too aggressive)
+            threshold: false,  // Disabled - adaptive thresholding may hurt UI text OCR
+        }
+    }
+}
+
+/// Enhanced preprocessing for better OCR accuracy on UI screenshots
+///
+/// This performs:
+/// 1. Upscaling to improve effective DPI (Tesseract prefers ~300 DPI)
+/// 2. Color inversion for dark-mode UIs (Tesseract expects dark-on-light)
+/// 3. Optional contrast enhancement
+fn preprocess_image(image: &RgbaImage, config: &PreprocessConfig) -> Vec<u8> {
+    use image::imageops::{FilterType, resize};
+
+    // Step 1: Upscale the image for better OCR
+    let original_width = image.width();
+    let original_height = image.height();
+    let new_width = (original_width as f32 * config.scale_factor) as u32;
+    let new_height = (original_height as f32 * config.scale_factor) as u32;
+
+    // Use Lanczos3 for high-quality upscaling
+    let resized = resize(image, new_width, new_height, FilterType::Lanczos3);
+
+    // Step 2: Convert to grayscale with inversion for dark mode
+    // Tesseract is trained on dark text on light backgrounds (paper)
+    // Most UIs are light text on dark backgrounds, so we invert
+    let mut luma_data = Vec::with_capacity((new_width * new_height) as usize);
+
+    for pixel in resized.pixels() {
+        // Skip fully transparent pixels (background)
+        if pixel[3] < 50 {
+            luma_data.push(255);  // White background
+            continue;
+        }
+
         // Standard ITU-R BT.709 luma calculation
-        let luma = (0.299 * pixel[0] as f32
+        let luma = 0.299 * pixel[0] as f32
             + 0.587 * pixel[1] as f32
-            + 0.114 * pixel[2] as f32) as u8;
-        luma_data.push(luma);
+            + 0.114 * pixel[2] as f32;
+
+        // Invert: light text becomes dark, dark background becomes light
+        let inverted = 255.0 - luma;
+
+        // Apply mild contrast enhancement if configured
+        let enhanced = if config.contrast > 1.0 {
+            ((inverted - 128.0) * config.contrast + 128.0).clamp(0.0, 255.0)
+        } else {
+            inverted
+        };
+
+        luma_data.push(enhanced as u8);
+    }
+
+    // Step 3: Apply adaptive thresholding if enabled
+    if config.threshold {
+        // Calculate local threshold using a simple moving average
+        // For better results on UI text with varying backgrounds
+        apply_adaptive_threshold(&mut luma_data, new_width, new_height);
     }
 
     luma_data
+}
+
+/// Apply adaptive thresholding for better text separation
+///
+/// This uses a simplified local threshold approach that works well for UI text
+/// on varying backgrounds. Each pixel is compared to the average of its neighborhood.
+fn apply_adaptive_threshold(data: &mut [u8], width: u32, height: u32) {
+    let w = width as usize;
+    let h = height as usize;
+    let radius = 3usize; // Neighborhood radius
+
+    // Create a copy for reading original values
+    let original = data.to_vec();
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = y * w + x;
+
+            // Calculate local average in neighborhood
+            let mut sum = 0u32;
+            let mut count = 0u32;
+
+            let y_start = y.saturating_sub(radius);
+            let y_end = (y + radius + 1).min(h);
+            let x_start = x.saturating_sub(radius);
+            let x_end = (x + radius + 1).min(w);
+
+            for ny in y_start..y_end {
+                for nx in x_start..x_end {
+                    sum += original[ny * w + nx] as u32;
+                    count += 1;
+                }
+            }
+
+            let local_avg = (sum / count) as u8;
+            let pixel = original[idx];
+
+            // Apply threshold with a slight bias toward dark (text)
+            // This helps with anti-aliased text
+            let threshold = if local_avg > 128 { local_avg - 10 } else { local_avg + 10 };
+
+            data[idx] = if pixel < threshold { 0 } else { 255 };
+        }
+    }
 }
 
 /// Extract text from a CaptureData using Tesseract OCR
@@ -161,15 +268,20 @@ pub fn extract_text(capture: &CaptureData, config: &OcrConfig) -> OcrResult<OcrO
     let rgba_image = capture_to_rgba_image(capture)
         .map_err(|e: SaveError| OcrError::ImageError(e.to_string()))?;
 
-    // Convert to grayscale for Tesseract
-    let luma_data = rgba_to_luma(&rgba_image);
-    let width = rgba_image.width() as i32;
-    let height = rgba_image.height() as i32;
+    // Apply enhanced preprocessing for better OCR accuracy
+    let preprocess_config = PreprocessConfig::default();
+    let luma_data = preprocess_image(&rgba_image, &preprocess_config);
+    let width = (rgba_image.width() as f32 * preprocess_config.scale_factor) as i32;
+    let height = (rgba_image.height() as f32 * preprocess_config.scale_factor) as i32;
 
-    // Initialize Tesseract
+    // Initialize Tesseract with optimized parameters for UI text
     let datapath = config.datapath.as_deref();
     let mut tesseract = tesseract::Tesseract::new(datapath, Some(&config.language))
         .map_err(|e| OcrError::InitializationError(e.to_string()))?
+        .set_variable("tessedit_pageseg_mode", "6")  // Assume a single uniform block of text
+        .map_err(|e| OcrError::InitializationError(format!("Failed to set psm: {}", e)))?
+        .set_variable("textord_heavy_nr", "1")  // Prefer noise removal for cleaner text
+        .map_err(|e| OcrError::InitializationError(format!("Failed to set noise removal: {}", e)))?
         .set_frame(
             &luma_data,
             width,
@@ -273,15 +385,20 @@ pub fn extract_text_from_path<P: AsRef<std::path::Path>>(
 
     let rgba_image = image.to_rgba8();
 
-    // Convert to grayscale for Tesseract
-    let luma_data = rgba_to_luma(&rgba_image);
-    let width = rgba_image.width() as i32;
-    let height = rgba_image.height() as i32;
+    // Apply enhanced preprocessing for better OCR accuracy
+    let preprocess_config = PreprocessConfig::default();
+    let luma_data = preprocess_image(&rgba_image, &preprocess_config);
+    let width = (rgba_image.width() as f32 * preprocess_config.scale_factor) as i32;
+    let height = (rgba_image.height() as f32 * preprocess_config.scale_factor) as i32;
 
-    // Initialize Tesseract
+    // Initialize Tesseract with optimized parameters for UI text
     let datapath = config.datapath.as_deref();
     let mut tesseract = tesseract::Tesseract::new(datapath, Some(&config.language))
         .map_err(|e| OcrError::InitializationError(e.to_string()))?
+        .set_variable("tessedit_pageseg_mode", "6")  // Assume a single uniform block of text
+        .map_err(|e| OcrError::InitializationError(format!("Failed to set psm: {}", e)))?
+        .set_variable("textord_heavy_nr", "1")  // Prefer noise removal for cleaner text
+        .map_err(|e| OcrError::InitializationError(format!("Failed to set noise removal: {}", e)))?
         .set_frame(
             &luma_data,
             width,

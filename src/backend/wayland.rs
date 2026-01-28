@@ -88,6 +88,34 @@ fn pixel_format_from_color_type(color_type: image::ColorType) -> Result<PixelFor
     }
 }
 
+/// Helper function to block on an async future, handling both cases:
+/// 1. When already inside a Tokio runtime (use block_in_place)
+/// 2. When outside a runtime (create a new one)
+///
+/// This is needed because the capture functions are synchronous but
+/// may be called from within an async context (e.g., from #[tokio::main])
+fn block_on_async<F, R>(future: F) -> DisplayResult<R>
+where
+    F: std::future::Future<Output = DisplayResult<R>>,
+{
+    // Try to get the current runtime handle
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            // We're inside a runtime, use block_in_place
+            // This yields to the runtime and blocks the current thread
+            tokio::task::block_in_place(move || {
+                handle.block_on(future)
+            })
+        }
+        Err(_) => {
+            // Not inside a runtime, create a new one
+            let rt = tokio::runtime::Runtime::new()
+                .map_err(|e| DisplayError::InitializationError(format!("Failed to create tokio runtime: {}", e)))?;
+            rt.block_on(future)
+        }
+    }
+}
+
 impl DisplayBackend for WaylandBackend {
     fn new() -> DisplayResult<Self> {
         // WaylandBackend is a zero-sized type, no initialization needed
@@ -95,12 +123,7 @@ impl DisplayBackend for WaylandBackend {
     }
 
     fn capture_screen(&self) -> DisplayResult<CaptureData> {
-        // Create a runtime for the async call
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| DisplayError::InitializationError(format!("Failed to create tokio runtime: {}", e)))?;
-
-        // Run the async capture
-        rt.block_on(async {
+        block_on_async(async {
             Self::capture_impl(false).await
         })
     }
@@ -115,10 +138,7 @@ impl DisplayBackend for WaylandBackend {
         // This is a security feature of Wayland - applications cannot capture
         // arbitrary screen regions without user consent.
 
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| DisplayError::InitializationError(format!("Failed to create tokio runtime: {}", e)))?;
-
-        rt.block_on(async {
+        block_on_async(async {
             Self::capture_impl(true).await
         })
     }
@@ -133,10 +153,7 @@ impl DisplayBackend for WaylandBackend {
         // This is a security feature of Wayland - applications cannot enumerate
         // or capture windows without user consent.
 
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| DisplayError::InitializationError(format!("Failed to create tokio runtime: {}", e)))?;
-
-        rt.block_on(async {
+        block_on_async(async {
             Self::capture_impl(true).await
         })
     }
