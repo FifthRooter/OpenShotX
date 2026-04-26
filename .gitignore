@@ -17,10 +17,6 @@
 .env
 
 # Local development docs (not for public distribution)
-TASK_WRAPUP.md
-IMPLEMENTATION_LOG.md
-PROGRESS.md
-SCROLLING_CAPTURE.md
-RECORDING_RESEARCH.md
-NEXT_SESSION.md
+# Stored in dev/ directory, symlinked in root for agent access
+dev/
 AGENTS.md
