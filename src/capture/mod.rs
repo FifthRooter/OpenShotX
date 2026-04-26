@@ -28,6 +28,79 @@ pub enum SaveError {
 
 pub type SaveResult<T> = Result<T, SaveError>;
 
+/// Copy an image file to the clipboard
+///
+/// On Wayland, uses `wl-copy` with image/png MIME type.
+/// On X11, uses `xclip` with image/png MIME type.
+pub fn copy_image_to_clipboard(path: &Path) -> SaveResult<()> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    println!("Copying image to clipboard...");
+
+    // For image copying, we should use the actual image data, not a URI
+    // This allows pasting directly into apps that support it
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        // Wayland: use wl-copy with image/png
+        let mut child = Command::new("wl-copy")
+            .arg("--type")
+            .arg("image/png")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|_| SaveError::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "wl-copy not found. Install wl-clipboard.",
+            )))?;
+
+        let image_data = std::fs::read(path)
+            .map_err(|e| SaveError::IoError(e))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(&image_data)?;
+        }
+
+        let status = child.wait()?;
+        if !status.success() {
+            return Err(SaveError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "wl-copy failed",
+            )));
+        }
+    } else {
+        // X11: use xclip with image/png
+        let mut child = Command::new("xclip")
+            .arg("-selection")
+            .arg("clipboard")
+            .arg("-t")
+            .arg("image/png")
+            .arg("-i")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|_| SaveError::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "xclip not found. Install xclip.",
+            )))?;
+
+        let image_data = std::fs::read(path)
+            .map_err(|e| SaveError::IoError(e))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(&image_data)?;
+        }
+
+        let status = child.wait()?;
+        if !status.success() {
+            return Err(SaveError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "xclip failed",
+            )));
+        }
+    }
+
+    println!("Image copied to clipboard!");
+    Ok(())
+}
+
 /// Output image format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {

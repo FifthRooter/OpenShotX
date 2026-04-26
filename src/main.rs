@@ -10,11 +10,12 @@
 
 use cleanshitx::{
     backend::{X11Backend, WaylandBackend, CaptureData, DisplayBackend},
-    capture::{save_capture, SaveConfig, ImageFormat},
+    capture::{save_capture, SaveConfig, ImageFormat, copy_image_to_clipboard},
     select_area,
     ocr::{extract_text_from_path, OcrConfig},
-        recording::{RecordingConfig, start_recording, copy_to_clipboard as copy_recording_to_clipboard},
-    };
+    recording::{RecordingConfig, start_recording, copy_to_clipboard as copy_recording_to_clipboard},
+    scrolling::{ScrollCaptureConfig, capture_scrolling_pw, save_scrolling_capture},
+};
     use std::path::PathBuf;
     
     #[tokio::main]
@@ -54,6 +55,12 @@ use cleanshitx::{
                 }
                 run_ocr(&args);
             }
+            "scroll" => {
+                if let Err(e) = run_scroll(&args).await {
+                    eprintln!("Scrolling capture failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
             "--help" | "-h" => print_usage(),
             _ => {
                 eprintln!("Error: unknown command '{}'", args[1]);
@@ -72,6 +79,7 @@ use cleanshitx::{
         println!("  capture <type>    Capture a screenshot");
         println!("  record <type>     Record video (MP4/GIF)");
         println!("  ocr <image>       Extract text from an image");
+        println!("  scroll            Capture scrolling content (auto-stitch frames)");
         println!();
         println!("Capture types:");
         println!("  screen            Capture the entire screen");
@@ -89,10 +97,19 @@ use cleanshitx::{
         println!("  --output <path>   Save to specific path (default: ~/Videos/output.mp4)");
         println!("  --gif             Record as GIF and copy to clipboard");
         println!();
+        println!("Scrolling capture options:");
+        println!("  --output <path>   Save to specific path (default: ~/Pictures)");
+        println!("  --interval <ms>   Capture interval in milliseconds (default: 200)");
+        println!("  --threshold <n>   Pixel diff threshold for stability 0-100 (default: 5)");
+        println!("  --stable <n>      Number of stable frames to stop (default: 3)");
+        println!("  --prefix <text>   Prefix for filename (default: 'scroll')");
+        println!("  --max-height <n>  Maximum output height in pixels (default: 20000)");
+        println!();
         println!("Examples:");
         println!("  cargo run -- capture screen");
         println!("  cargo run -- record screen");
         println!("  cargo run -- record area --gif");
+        println!("  cargo run -- scroll");
     }
     
     fn run_capture(args: &[String]) {
@@ -282,6 +299,13 @@ use cleanshitx::{
                 std::process::exit(1);
             }
         };
+
+        // Copy image to clipboard (for non-OCR captures, OCR has its own clipboard handling)
+        if !run_ocr {
+            if let Err(e) = copy_image_to_clipboard(&saved_path) {
+                eprintln!("Warning: Failed to copy image to clipboard: {}", e);
+            }
+        }
     
         // Run OCR if requested
         if run_ocr {
@@ -476,3 +500,111 @@ use cleanshitx::{
             
                 Ok(())
             }
+
+    async fn run_scroll(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        // Parse scroll options
+        let mut output_path: Option<PathBuf> = None;
+        let mut interval_ms: Option<u64> = None;
+        let mut threshold: Option<u8> = None;
+        let mut stable_count: Option<usize> = None;
+        let mut prefix: Option<String> = None;
+        let mut max_height: Option<u32> = None;
+
+        let mut i = 2;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--output" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --output requires a path");
+                        std::process::exit(1);
+                    }
+                    output_path = Some(PathBuf::from(&args[i + 1]));
+                    i += 2;
+                }
+                "--interval" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --interval requires a number");
+                        std::process::exit(1);
+                    }
+                    interval_ms = Some(args[i + 1].parse::<u64>()
+                        .expect("Interval must be a number"));
+                    i += 2;
+                }
+                "--threshold" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --threshold requires a number");
+                        std::process::exit(1);
+                    }
+                    threshold = Some(args[i + 1].parse::<u8>()
+                        .expect("Threshold must be a number"));
+                    i += 2;
+                }
+                "--stable" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --stable requires a number");
+                        std::process::exit(1);
+                    }
+                    stable_count = Some(args[i + 1].parse::<usize>()
+                        .expect("Stable count must be a number"));
+                    i += 2;
+                }
+                "--prefix" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --prefix requires text");
+                        std::process::exit(1);
+                    }
+                    prefix = Some(args[i + 1].clone());
+                    i += 2;
+                }
+                "--max-height" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --max-height requires a number");
+                        std::process::exit(1);
+                    }
+                    max_height = Some(args[i + 1].parse::<u32>()
+                        .expect("Max height must be a number"));
+                    i += 2;
+                }
+                _ => {
+                    eprintln!("Error: unknown option '{}'", args[i]);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        // Build scroll config
+        let mut config = ScrollCaptureConfig::default();
+
+        if let Some(interval) = interval_ms {
+            config = config.with_capture_interval(std::time::Duration::from_millis(interval));
+        }
+
+        if let Some(thresh) = threshold {
+            config = config.with_stability_threshold(thresh);
+        }
+
+        if let Some(stable) = stable_count {
+            config = config.with_stable_frame_count(stable);
+        }
+
+        if let Some(h) = max_height {
+            config = config.with_max_height(h);
+        }
+
+        if let Some(p) = prefix {
+            config.save_config = config.save_config.with_prefix(p);
+        }
+
+        if let Some(path) = output_path {
+            config.save_config = config.save_config.with_output_dir(path);
+        }
+
+        // Run scrolling capture (works on both X11 and Wayland via PipeWire)
+        let result = capture_scrolling_pw(&config).await?;
+
+        // Save result
+        let saved_path = save_scrolling_capture(&result, &config)?;
+        println!("\nSaved to: {}", saved_path.display());
+
+        Ok(())
+    }

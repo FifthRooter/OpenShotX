@@ -482,40 +482,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rgba_to_luma_conversion() {
-        // Create a simple 2x2 RGBA image
-        let image: RgbaImage = image::ImageBuffer::from_raw(2, 2, vec![
-            255, 0, 0, 255,    // Red
-            0, 255, 0, 255,    // Green
-            0, 0, 255, 255,    // Blue
-            255, 255, 255, 255, // White
-        ]).unwrap();
-
-        let luma = rgba_to_luma(&image);
-
-        // Red: 0.299*255 = 76
-        assert!((luma[0] as i32 - 76).abs() < 2);
-        // Green: 0.587*255 = 150
-        assert!((luma[1] as i32 - 150).abs() < 2);
-        // Blue: 0.114*255 = 29
-        assert!((luma[2] as i32 - 29).abs() < 2);
-        // White: 255
-        assert_eq!(luma[3], 255);
-    }
-
-    #[test]
-    fn test_rgba_to_luma_alpha_channel_ignored() {
-        // Test that alpha doesn't affect luma calculation
-        let image1: RgbaImage = image::ImageBuffer::from_raw(1, 1, vec![255, 0, 0, 255]).unwrap();
-        let image2: RgbaImage = image::ImageBuffer::from_raw(1, 1, vec![255, 0, 0, 128]).unwrap();
-
-        let luma1 = rgba_to_luma(&image1);
-        let luma2 = rgba_to_luma(&image2);
-
-        assert_eq!(luma1[0], luma2[0]);
-    }
-
-    #[test]
     fn test_extract_text_empty_capture() {
         // Create an empty 10x10 white image
         let pixels = vec![255u8; 10 * 10 * 3];

@@ -2,6 +2,20 @@
 
 ## completed
 
+### v0.2.2 - clipboard integration & keybindings (2026-04-26)
+- [x] add clipboard integration for ALL capture types (not just OCR/GIF)
+  - copy_image_to_clipboard() function in capture module
+  - uses wl-copy (Wayland) or xclip (X11) with image/png MIME type
+  - automatic copy after every successful capture
+  - skipped when --ocr is used (OCR has its own text clipboard handling)
+- [x] add Hyprland keybindings for quick access
+  - Super+Ctrl+1 → capture area
+  - Super+Ctrl+2 → capture area --ocr
+  - Super+Ctrl+3 → record area --gif
+  - Super+Ctrl+4 → capture screen
+  - Super+Ctrl+5 → scroll
+- [x] install binary to ~/.local/bin/openshotx for PATH access
+
 ### v0.2.1 - ocr improvements
 - [x] fix tokio runtime panic in wayland backend
 - [x] add 3x upscaling (lanczos3) for better dpi
@@ -55,17 +69,25 @@
 
 ## in progress
 
-nothing active
+### v0.3.0 - scrolling capture
+- [x] pipewire/gstreamer integration for frame capture
+- [x] activity detection (pixel diff threshold)
+- [x] user-controlled stop (ENTER to finish)
+- [x] basic overlap detection for stitching
+- [ ] duplicate frame filtering (HIGH PRIORITY - produces poor output without it)
+- [ ] overlap detection optimization (O(n²) is too slow)
+- [ ] wayland portal region cropping (captures more than selected region)
+- [ ] adaptive capture rate based on scroll speed
+
+**See SCROLLING_CAPTURE.md for full details on known issues.**
 
 ## todo
 
 ### blockers
 - [ ] config system (yaml)
 - [ ] multi-monitor support
-- [ ] cli hotkey integration
 
 ### future
-- [ ] scrolling capture
 - [ ] annotation editor
 - [ ] audio capture (pipewire negotiation issues)
 - [ ] cloud upload
@@ -82,13 +104,20 @@ nothing active
 - ubuntu: `sudo apt install tesseract-ocr libtesseract-dev`
 - fedora: `sudo dnf install tesseract leptonica`
 
+### clipboard (screenshots)
+- wayland: `sudo pacman -S wl-clipboard` (wl-copy)
+- x11: `sudo pacman -S xclip`
+
 ### general
 - rust toolchain
 - gtk4 dev files
-- wl-clipboard (wayland)
 
 ## notes
 
 **wayland limitations:** area/window capture require user interaction through portal dialogs. coordinate-based capture is not possible due to security design.
 
-**test status:** 33/33 tests passing
+**wayland portal behavior:** When using area capture on Wayland, the xdg-desktop-portal shows a system chooser (screen/window/area). This is a security feature, not a bug. There's no way to bypass this and jump straight to region selection.
+
+**X11 advantage:** On X11, the GTK overlay allows direct area selection without any dialog.
+
+**test status:** 56 tests passing (as of 2026-04-26)
