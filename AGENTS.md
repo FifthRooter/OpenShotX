@@ -97,29 +97,23 @@ Cargo.toml            # Dependencies: x11rb, ashpd, gtk4, gstreamer, tesseract, 
 
 ## Development Context (Local Only)
 
-Development docs are stored in `dev/` directory and symlinked in root. This keeps them accessible to agents but gitignored (not committed).
+Development docs are stored in `dev-docs/` directory. This directory is gitignored and NOT committed to the public repository.
 
 ### Dev Docs Structure
 ```
-dev/                        # All dev docs live here (gitignored)
-├── SCROLLING_CAPTURE.md    # Scrolling capture detailed analysis
-├── PROGRESS.md             # Development progress tracker
-├── TASK_WRAPUP.md          # Task completion checklist
-├── IMPLEMENTATION_LOG.md   # Dev journal (attempts, failures, successes)
-├── RECORDING_RESEARCH.md   # Old research notes
-└── NEXT_SESSION.md         # Transient notes for next session
-
-# Symlinks in root for easy access:
-SCROLLING_CAPTURE.md → dev/SCROLLING_CAPTURE.md
-PROGRESS.md → dev/PROGRESS.md
-TASK_WRAPUP.md → dev/TASK_WRAPUP.md
-IMPLEMENTATION_LOG.md → dev/IMPLEMENTATION_LOG.md
+dev-docs/                        # All dev docs live here (gitignored)
+├── SCROLLING_CAPTURE.md          # Scrolling capture detailed analysis
+├── PROGRESS.md                   # Development progress tracker
+├── TASK_WRAPUP.md                # Task completion checklist
+├── IMPLEMENTATION_LOG.md         # Dev journal (attempts, failures, successes)
+├── RECORDING_RESEARCH.md         # Old research notes
+└── NEXT_SESSION.md               # Transient notes for next session
 ```
 
 ### How to Use Dev Docs
-- **Scrolling capture work:** Read `SCROLLING_CAPTURE.md` - has full analysis of issues, solutions
-- **Tracking progress:** Read `PROGRESS.md` - what was completed when
-- **After completing a task:** Update docs in `dev/` directory
+- **Scrolling capture work:** Read `dev-docs/SCROLLING_CAPTURE.md` - has full analysis of issues, solutions
+- **Tracking progress:** Read `dev-docs/PROGRESS.md` - what was completed when
+- **After completing a task:** Update docs in `dev-docs/` directory
 - **New session:** Start by reading `AGENTS.md` (this file) + relevant dev docs
 
 ### Key Files for This Project
@@ -128,10 +122,10 @@ IMPLEMENTATION_LOG.md → dev/IMPLEMENTATION_LOG.md
 | `AGENTS.md` | This file - project context for agents |
 | `README.md` | Public-facing install/use instructions |
 | `ROADMAP.md` | Feature roadmap and priorities |
-| `SCROLLING_CAPTURE.md` | **Critical for scrolling capture work** |
-| `PROGRESS.md` | Dev history and status |
+| `dev-docs/SCROLLING_CAPTURE.md` | **Critical for scrolling capture work** |
+| `dev-docs/PROGRESS.md` | Dev history and status |
 
-See `SCROLLING_CAPTURE.md` for full details on scrolling capture issues.
+See `dev-docs/SCROLLING_CAPTURE.md` for full details on scrolling capture issues.
 
 ## Future Features
 
@@ -146,7 +140,7 @@ See `SCROLLING_CAPTURE.md` for full details on scrolling capture issues.
 - **Wayland security:** Area/window capture requires portal dialog interaction. Cannot bypass.
 - **X11 advantage:** GTK overlay goes straight to region selection, no dialog.
 - **Binary location:** `~/.local/bin/openshotx` after install.
-- **Dev docs:** Stored in `dev/` (gitignored), symlinked in root for agent access.
+- **Dev docs:** Stored in `dev-docs/` (gitignored), NOT committed to repo.
 
 ## Common Tasks
 
@@ -168,7 +162,7 @@ openshotx capture area
 ```
 
 ### Work on scrolling capture
-- Read `SCROLLING_CAPTURE.md` for context
+- Read `dev-docs/SCROLLING_CAPTURE.md` for context
 - Main code in `src/scrolling/mod.rs`
 - Focus on `CapturedFrame::calculate_diff()` and `find_overlap()`
 
@@ -177,7 +171,7 @@ openshotx capture area
 When completing a task:
 1. Run `cargo test && cargo clippy && cargo build --release`
 2. Test the feature manually
-3. Update relevant local docs (SCROLLING_CAPTURE.md, PROGRESS.md)
+3. Update relevant local docs (dev-docs/SCROLLING_CAPTURE.md, dev-docs/PROGRESS.md)
 4. Commit with clear message describing what was done
 
 Do NOT commit local dev docs to the public repository.

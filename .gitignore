@@ -17,5 +17,4 @@
 .env
 
 # Local development docs (not for public distribution)
-# Stored in dev/ directory, symlinked in root for agent access
-dev/
+dev-docs/

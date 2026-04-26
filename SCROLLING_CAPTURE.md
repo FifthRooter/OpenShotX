@@ -1,1 +1,0 @@
-dev/SCROLLING_CAPTURE.md
