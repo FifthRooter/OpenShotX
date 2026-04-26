@@ -11,8 +11,8 @@
 //! On KDE/other compositors, behavior may vary.
 
 #![cfg(test)]
-use cleanshitx::backend::wayland::WaylandBackend;
-use cleanshitx::backend::DisplayBackend;
+use openshotx::backend::wayland::WaylandBackend;
+use openshotx::backend::DisplayBackend;
 
 /// Test basic backend creation and support detection
 #[test]

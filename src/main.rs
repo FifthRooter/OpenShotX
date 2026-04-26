@@ -8,7 +8,7 @@
 //!   cargo run -- record area
 //!   cargo run -- ocr <image>
 
-use cleanshitx::{
+use openshotx::{
     backend::{X11Backend, WaylandBackend, CaptureData, DisplayBackend},
     capture::{save_capture, SaveConfig, ImageFormat, copy_image_to_clipboard},
     select_area,

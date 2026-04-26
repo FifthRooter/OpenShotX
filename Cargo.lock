@@ -421,36 +421,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cleanshitx"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "ashpd",
- "async-trait",
- "chrono",
- "dirs",
- "futures-util",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-video",
- "gtk4",
- "image 0.24.9",
- "mockall",
- "pretty_assertions",
- "serde",
- "serde_yml",
- "tesseract",
- "test-case",
- "thiserror 2.0.16",
- "tokio",
- "tracing",
- "url",
- "x11rb",
- "zbus",
-]
-
-[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1876,6 +1846,36 @@ name = "once_cell"
 version = "1.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
+
+[[package]]
+name = "openshotx"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "ashpd",
+ "async-trait",
+ "chrono",
+ "dirs",
+ "futures-util",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-video",
+ "gtk4",
+ "image 0.24.9",
+ "mockall",
+ "pretty_assertions",
+ "serde",
+ "serde_yml",
+ "tesseract",
+ "test-case",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "url",
+ "x11rb",
+ "zbus",
+]
 
 [[package]]
 name = "option-ext"

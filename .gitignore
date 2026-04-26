@@ -15,3 +15,11 @@
 # OS specific files
 .DS_Store
 .env
+
+# Local development docs (not for public distribution)
+TASK_WRAPUP.md
+IMPLEMENTATION_LOG.md
+PROGRESS.md
+SCROLLING_CAPTURE.md
+RECORDING_RESEARCH.md
+NEXT_SESSION.md

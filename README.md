@@ -8,7 +8,7 @@ ever since i moved from macos to linux CleanShot X is the one app i actually mis
 
 so let's rip it off and share it with the linux world for free.
 
-i'm building this while HEAVILY assissted by LLMs (Gemini 3s, Claudes, GLM 4.7). it's fine if you don't approve etc, i don't really care. it's been 2 years since i created this repo and nothing proper has come out still. imo it's better this project exists because of AI than never having existed. you don't have to use it.
+i'm building this while assisted by LLMs. it's fine if you don't approve etc, i don't really care. it's been 2 years since i created this repo and nothing proper has come out still. imo it's better this project exists because of AI than never having existed. you don't have to use it.
 
 ## what actually works right now
 
@@ -31,14 +31,7 @@ i'm building this while HEAVILY assissted by LLMs (Gemini 3s, Claudes, GLM 4.7).
 **scrolling capture (beta - see SCROLLING_CAPTURE.md for known issues):**
 - `openshotx scroll` - capture scrolling content by stitching overlapping frames
 
-**keyboard shortcuts (Hyprland):**
-```
-Super+Ctrl+1 → capture area
-Super+Ctrl+2 → capture area --ocr
-Super+Ctrl+3 → record area --gif
-Super+Ctrl+4 → capture screen
-Super+Ctrl+5 → scroll
-```
+**Note:** Keyboard shortcuts are not included - you'll need to configure your own based on your window manager/desktop environment.
 
 All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by default. use `--output /some/path` to change.
 
@@ -136,7 +129,7 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
    ```
 
 3. `cargo build --release`
-4. `install -Dm755 target/release/cleanshitx ~/.local/bin/openshotx`
+4. `install -Dm755 target/release/openshotx ~/.local/bin/openshotx`
 
 ## roadmap
 
@@ -149,7 +142,6 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
 - screen recording (mp4/webm/gif)
 - ocr text extraction
 - clipboard integration (all capture types)
-- keyboard shortcuts (hyprland)
 
 **in progress:**
 - scrolling capture (beta - has known issues with duplicate frames and overlap detection)
@@ -176,9 +168,8 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
 - gtk4 area overlay: complete
 - scrolling capture: partial (works but has quality issues)
 - clipboard: complete (all capture types)
-- keybindings: complete (Super+Ctrl+1-5)
 
-tested on Arch Linux + Hyprland. it's very much a 'it works on my machine' situation fyi.
+tested on Arch Linux + Hyprland (X11 and Wayland). it's very much a 'it works on my machine' situation fyi.
 
 check ROADMAP.md if you want the full picture.
 

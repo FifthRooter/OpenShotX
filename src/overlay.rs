@@ -102,7 +102,7 @@ impl AreaSelector {
 
         // Create application
         let app = Application::builder()
-            .application_id("com.cleanshitx.screenshot")
+            .application_id("com.openshotx.screenshot")
             .build();
 
         // Clone state for the activate handler
