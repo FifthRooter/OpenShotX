@@ -12,7 +12,6 @@ use gstreamer_app as gst_app;
 use gst::prelude::*;
 use image::{imageops, GenericImageView, RgbaImage};
 use std::time::{Duration, Instant};
-use std::thread;
 use thiserror::Error;
 
 /// Errors that can occur during scrolling capture
@@ -67,6 +66,9 @@ pub struct ScrollCaptureConfig {
 
     /// Save configuration for output image
     pub save_config: SaveConfig,
+
+    /// Deduplication threshold - skip frames where diff is below this value (0-100, default: 5)
+    pub deduplication_threshold: u8,
 }
 
 impl Default for ScrollCaptureConfig {
@@ -79,11 +81,18 @@ impl Default for ScrollCaptureConfig {
             min_overlap_ratio: 0.1,
             max_height: Some(20000),
             save_config: SaveConfig::default(),
+            deduplication_threshold: 5,
         }
     }
 }
 
 impl ScrollCaptureConfig {
+    /// Set the deduplication threshold
+    pub fn with_deduplication_threshold(mut self, threshold: u8) -> Self {
+        self.deduplication_threshold = threshold.clamp(0, 100);
+        self
+    }
+
     /// Set the capture interval between frames
     pub fn with_capture_interval(mut self, interval: Duration) -> Self {
         self.capture_interval = interval;
@@ -123,21 +132,40 @@ impl ScrollCaptureConfig {
 
 /// A captured frame with metadata
 #[derive(Debug, Clone)]
-struct CapturedFrame {
+pub struct CapturedFrame {
     /// The image data
     image: RgbaImage,
 }
 
 impl CapturedFrame {
+    pub fn new(image: RgbaImage) -> Self {
+        Self { image }
+    }
+
+    fn downsample(img: &RgbaImage, factor: u32) -> RgbaImage {
+        let w = img.width() / factor;
+        let h = img.height() / factor;
+        let mut out = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let p = img.get_pixel(x * factor, y * factor);
+                out.put_pixel(x, y, *p);
+            }
+        }
+        out
+    }
+
     /// Calculate the difference between this frame and another
     /// Returns a value 0-255 representing average pixel difference
-    fn calculate_diff(&self, other: &CapturedFrame) -> u8 {
-        // Compare overlapping region only
-        let width = self.image.width().min(other.image.width());
-        let height = self.image.height().min(other.image.height());
+    pub fn calculate_diff(&self, other: &CapturedFrame) -> u8 {
+        let ds_self = Self::downsample(&self.image, 4);
+        let ds_other = Self::downsample(&other.image, 4);
+
+        let width = ds_self.width().min(ds_other.width());
+        let height = ds_self.height().min(ds_other.height());
 
         if width == 0 || height == 0 {
-            return 255; // Maximum difference
+            return 255;
         }
 
         let mut total_diff: u64 = 0;
@@ -145,10 +173,9 @@ impl CapturedFrame {
 
         for y in 0..height {
             for x in 0..width {
-                let p1 = self.image.get_pixel(x, y);
-                let p2 = other.image.get_pixel(x, y);
+                let p1 = ds_self.get_pixel(x, y);
+                let p2 = ds_other.get_pixel(x, y);
 
-                // Calculate per-channel difference
                 let diff = (p1[0] as i16 - p2[0] as i16).abs()
                     + (p1[1] as i16 - p2[1] as i16).abs()
                     + (p1[2] as i16 - p2[2] as i16).abs();
@@ -157,42 +184,45 @@ impl CapturedFrame {
             }
         }
 
-        // Average difference per pixel per channel (0-255)
         (total_diff / (pixel_count * 3)) as u8
     }
 
     /// Find the vertical overlap offset with another frame
-    fn find_overlap(&self, other: &CapturedFrame, min_overlap_ratio: f32) -> Option<(u32, u32)> {
-        let self_height = self.image.height() as i32;
-        let other_height = other.image.height() as i32;
+    pub fn find_overlap(&self, other: &CapturedFrame, min_overlap_ratio: f32) -> Option<(u32, u32)> {
+        let ds_self = Self::downsample(&self.image, 4);
+        let ds_other = Self::downsample(&other.image, 4);
+
+        let self_height = ds_self.height() as i32;
+        let other_height = ds_other.height() as i32;
 
         if self_height <= 0 || other_height <= 0 {
             return None;
         }
 
-        // If frames are identical (calculated earlier), don't try to stitch
-        // Just return None so we append the full frame
         let quick_diff = self.calculate_diff(other);
         if quick_diff < 3 {
-            // Frames are too similar, might be duplicates
             return None;
         }
 
         let min_overlap = (self_height as f32 * min_overlap_ratio) as i32;
         let max_overlap = self_height.min(other_height) - 10;
+        let width = ds_self.width().min(ds_other.width());
+        let threshold = 10;
+        let early_break = max_overlap as u64 * width as u64 * threshold as u64;
+
+        let mut best_overlap: Option<(u32, u8)> = None;
 
         for overlap in (min_overlap..max_overlap).rev() {
             let self_start = self_height - overlap;
             let mut total_diff: u64 = 0;
-            let compare_pixels = (overlap * self.image.width() as i32) as u64;
 
             for y in 0..overlap {
                 let self_y = (self_start + y) as u32;
                 let other_y = y as u32;
 
-                for x in 0..self.image.width().min(other.image.width()) {
-                    let p1 = self.image.get_pixel(x, self_y);
-                    let p2 = other.image.get_pixel(x, other_y);
+                for x in 0..width {
+                    let p1 = ds_self.get_pixel(x, self_y);
+                    let p2 = ds_other.get_pixel(x, other_y);
 
                     let diff = (p1[0] as i16 - p2[0] as i16).abs()
                         + (p1[1] as i16 - p2[1] as i16).abs()
@@ -200,17 +230,31 @@ impl CapturedFrame {
 
                     total_diff += diff as u64;
                 }
+
+                if total_diff > early_break {
+                    break;
+                }
             }
 
-            let avg_diff = (total_diff / (compare_pixels * 3)) as u8;
+            let compare_pixels = (overlap as u64 * width as u64).saturating_mul(3);
+            let avg_diff = if compare_pixels > 0 {
+                (total_diff / compare_pixels) as u8
+            } else {
+                255
+            };
 
-            // Stricter threshold for overlap detection
             if avg_diff < 10 {
-                return Some((overlap as u32, overlap as u32));
+                match best_overlap {
+                    None => best_overlap = Some((overlap as u32, avg_diff)),
+                    Some((_, best_diff)) if avg_diff < best_diff => {
+                        best_overlap = Some((overlap as u32, avg_diff));
+                    }
+                    _ => {}
+                }
             }
         }
 
-        None
+        best_overlap.map(|(overlap, _)| (overlap * 4, overlap * 4))
     }
 }
 
@@ -298,7 +342,7 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
     println!("✓ Connected to PipeWire stream (Node ID: {})", node_id);
     println!("\n=== SCROLLING CAPTURE ===");
     println!("Start scrolling now!");
-    println!("Press ENTER when you're done (capture will stop automatically).\n");
+    println!("Run 'openshotx scroll stop' or press Ctrl+C when done.\n");
 
     // Build GStreamer pipeline: PipeWire -> videoconvert -> videorate -> appsink
     // Using the same pipeline structure as GIF recording which works
@@ -347,38 +391,17 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
     let mut activity_detected = false; // Phase 1: wait for movement
     let first_frame_deadline = Instant::now() + config.first_frame_timeout;
     let mut last_capture_time = Instant::now();
-
-    // Spawn a thread to listen for ENTER key
-    let enter_pressed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let enter_pressed_clone = enter_pressed.clone();
-
-    thread::spawn(move || {
-        use std::io;
-        let mut line = String::new();
-        // Just wait for one line (ENTER key)
-        let _ = io::stdin().read_line(&mut line);
-        enter_pressed_clone.store(true, std::sync::atomic::Ordering::SeqCst);
-    });
+    let mut state_written = false;
 
     // Handle Ctrl+C
     let ctrl_c = tokio::signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
     loop {
-        // Check if ENTER was pressed
-        if enter_pressed.load(std::sync::atomic::Ordering::SeqCst) {
-            if activity_detected {
-                println!("\n✓ ENTER pressed - stopping capture!");
-            } else {
-                println!("\n✓ ENTER pressed - no scrolling detected, using captured frames.");
-            }
-            break;
-        }
-
         // Pull samples continuously (like GIF recording) but only process at intervals
         tokio::select! {
             _ = &mut ctrl_c => {
-                println!("\nCtrl+C received, stopping capture...");
+                println!("\nStop signal received, stopping capture...");
                 break;
             }
             _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {
@@ -427,6 +450,18 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
                             continue;
                         }
 
+                        // Write state file once we have a frame
+                        if !state_written {
+                            use crate::recording::state::{
+                                write_state, scroll_state_path, RecordingState, RecordingKind, RecordingFormat,
+                            };
+                            let state = RecordingState::new(RecordingKind::Scrolling, RecordingFormat::Png);
+                            if let Err(e) = write_state(&state, &scroll_state_path()) {
+                                eprintln!("Warning: Failed to write scroll state file: {}", e);
+                            }
+                            state_written = true;
+                        }
+
                         // Compare with last frame
                         let diff = frames.last()
                             .map(|last| last.calculate_diff(&current_frame))
@@ -438,7 +473,7 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
                             if diff > 15 {
                                 activity_detected = true;
                                 println!("● Activity detected - capturing scroll...");
-                                println!("   Press ENTER when finished scrolling\n");
+                                println!("   Run 'openshotx scroll stop' or press Ctrl+C when done\n");
                                 // Don't continue - fall through to capture this frame
                             } else {
                                 // Still waiting, don't count this frame
@@ -453,7 +488,11 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
                         }
 
                         // Phase 2: Scrolling started - just capture continuously
-                        // User will press ENTER to finish
+                        // User will run 'openshotx scroll stop' to finish
+                        if activity_detected && diff < config.deduplication_threshold {
+                            println!("  Skipping duplicate frame (diff: {})", diff);
+                            continue;
+                        }
                         println!("  Frame {} - diff: {}", frames.len() + 1, diff);
                         frames.push(current_frame);
 
@@ -487,6 +526,7 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
         .map_err(|e| ScrollError::GStreamerError(format!("Failed to stop pipeline: {}", e)))?;
 
     if frames.is_empty() {
+        let _ = crate::recording::state::clear_state(&crate::recording::state::scroll_state_path());
         return Err(ScrollError::NoFramesCaptured);
     }
 
@@ -494,6 +534,8 @@ pub async fn capture_scrolling_pw(config: &ScrollCaptureConfig) -> ScrollResult<
 
     // Stitch frames
     let result = stitch_frames(&frames, config)?;
+
+    let _ = crate::recording::state::clear_state(&crate::recording::state::scroll_state_path());
 
     println!("✓ Stitched into {}x{} image",
         result.image.width(),
@@ -546,7 +588,7 @@ fn estimate_height(frames: &[CapturedFrame]) -> u32 {
 }
 
 /// Stitch multiple captured frames into a single tall image
-fn stitch_frames(
+pub fn stitch_frames(
     frames: &[CapturedFrame],
     config: &ScrollCaptureConfig,
 ) -> ScrollResult<ScrollCaptureResult> {

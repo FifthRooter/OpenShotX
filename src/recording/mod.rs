@@ -6,6 +6,14 @@ use gst::prelude::*;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 
+pub mod state;
+
+pub use state::{
+    clear_state, is_process_alive, read_state, scroll_state_path, send_sigint,
+    send_sigterm, state_path, stop_recording, write_state, RecordingFormat,
+    RecordingKind, RecordingState, StateError, StateResult, StopOutcome,
+};
+
 #[derive(Debug, Error)]
 pub enum RecordError {
     #[error("GStreamer initialization failed: {0}")]
@@ -144,8 +152,8 @@ pub async fn start_recording(config: RecordingConfig) -> RecordResult<PathBuf> {
         if let Some(bus) = pipeline.bus() {
             while let Some(msg) = bus.pop() {
                 if let gst::MessageView::Error(err) = msg.view() {
-                    eprintln!("Detailed Error from {}: {}", 
-                        err.src().map(|s| s.name()).unwrap_or("unknown".into()), 
+                    eprintln!("Detailed Error from {}: {}",
+                        err.src().map(|s| s.name()).unwrap_or("unknown".into()),
                         err.error()
                     );
                     if let Some(debug) = err.debug() {
@@ -158,10 +166,27 @@ pub async fn start_recording(config: RecordingConfig) -> RecordResult<PathBuf> {
         return Err(RecordError::GStreamerError(format!("State change failed: {}", err)));
     }
 
+    // Write state file so external `openshotx record stop` can find us
+    let kind = if config.width.is_some() && config.height.is_some() {
+        RecordingKind::Area
+    } else {
+        RecordingKind::Screen
+    };
+    let format = match final_path.extension().and_then(|e| e.to_str()) {
+        Some("mp4") => RecordingFormat::Mp4,
+        Some("webm") => RecordingFormat::Webm,
+        Some("ogv") => RecordingFormat::Ogv,
+        _ => RecordingFormat::Mp4,
+    };
+    let state = RecordingState::new(kind, format).with_output_path(final_path.clone());
+    if let Err(e) = write_state(&state, &state_path()) {
+        eprintln!("Warning: Failed to write recording state file: {}", e);
+    }
+
     // 6. Watch for messages and Ctrl+C
     let bus = pipeline.bus().ok_or_else(|| RecordError::GStreamerError("Pipeline has no bus".into()))?;
-    
-    println!("Recording... Press Ctrl+C to stop.");
+
+    println!("Recording... Press Ctrl+C or run 'openshotx record stop' to stop.");
 
     // Handle Ctrl+C
     let ctrl_c = tokio::signal::ctrl_c();
@@ -237,11 +262,13 @@ pub async fn start_recording(config: RecordingConfig) -> RecordResult<PathBuf> {
     pipeline.set_state(gst::State::Null)
         .map_err(|e| RecordError::GStreamerError(format!("Failed to set state to Null: {}", e)))?;
 
+    let _ = clear_state(&state_path());
+
     println!("Recording saved to {:?}", final_path);
     if let Ok(metadata) = std::fs::metadata(&final_path) {
         println!("File size: {:.2} MB", metadata.len() as f64 / 1024.0 / 1024.0);
     }
-    
+
     Ok(final_path)
 }
 
@@ -475,7 +502,7 @@ async fn record_gif_rust(config: RecordingConfig) -> RecordResult<PathBuf> {
     };
 
     let pipeline_str = format!(
-        "{} ! videoconvert ! videorate ! video/x-raw,format=RGBA,framerate=25/1 ! appsink name=sink emit-signals=true sync=false drop=false max-buffers=200",
+        "{} ! videoconvert ! videorate ! video/x-raw,format=RGBA,framerate=12/1 ! appsink name=sink emit-signals=true sync=false drop=false max-buffers=200",
         source_str
     );
 
@@ -493,7 +520,18 @@ async fn record_gif_rust(config: RecordingConfig) -> RecordResult<PathBuf> {
     pipeline.set_state(gst::State::Playing)
         .map_err(|e| RecordError::GStreamerError(format!("Failed to start pipeline: {}", e)))?;
 
-    println!("Recording GIF... Press Ctrl+C to stop.");
+    let kind = if config.width.is_some() && config.height.is_some() {
+        RecordingKind::Area
+    } else {
+        RecordingKind::Screen
+    };
+    let state = RecordingState::new(kind, RecordingFormat::Gif)
+        .with_output_path(config.output_path.clone());
+    if let Err(e) = write_state(&state, &state_path()) {
+        eprintln!("Warning: Failed to write recording state file: {}", e);
+    }
+
+    println!("Recording GIF... Press Ctrl+C or run 'openshotx record stop' to stop.");
 
     // Handle Ctrl+C
     let ctrl_c = tokio::signal::ctrl_c();
@@ -531,10 +569,13 @@ async fn record_gif_rust(config: RecordingConfig) -> RecordResult<PathBuf> {
                                 .arg("-f").arg("rawvideo")
                                 .arg("-pix_fmt").arg("rgba")
                                 .arg("-s").arg(format!("{}x{}", width, height))
-                                .arg("-r").arg("25")
+                                .arg("-r").arg("12")
                                 .arg("-i").arg("pipe:0")
-                                // High quality GIF palette generation
-                                .arg("-vf").arg("split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
+                                // Aggressive compression: 480px wide, 12fps, smaller palette
+                                // 480x270 at 12fps is ~0.35MP/frame — fits a 30s GIF in <10MB.
+                                .arg("-vf").arg(format!(
+                                    "fps=12,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
+                                ))
                                 .arg(&config.output_path)
                                 .stdin(Stdio::piped())
                                 .stdout(Stdio::null())
@@ -596,8 +637,11 @@ async fn record_gif_rust(config: RecordingConfig) -> RecordResult<PathBuf> {
             }
         }
     } else {
+        let _ = clear_state(&state_path());
         return Err(RecordError::GifError("No frames captured".into()));
     }
+
+    let _ = clear_state(&state_path());
 
     println!("GIF saved to {:?}", config.output_path);
     Ok(config.output_path)

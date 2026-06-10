@@ -14,7 +14,9 @@ use openshotx::{
     select_area,
     ocr::{extract_text_from_path, OcrConfig},
     recording::{RecordingConfig, start_recording, copy_to_clipboard as copy_recording_to_clipboard},
+    recording::state::{scroll_state_path, state_path, stop_recording, StopOutcome},
     scrolling::{ScrollCaptureConfig, capture_scrolling_pw, save_scrolling_capture},
+    utils::notify,
 };
     use std::path::PathBuf;
     
@@ -38,13 +40,34 @@ use openshotx::{
             }
             "record" => {
                 if args.len() < 3 {
-                    eprintln!("Error: missing recording type");
+                    eprintln!("Error: missing recording type or 'stop'/'toggle'");
                     print_usage();
                     std::process::exit(1);
                 }
-                if let Err(e) = run_record(&args).await {
-                    eprintln!("Recording failed: {}", e);
-                    std::process::exit(1);
+                match args[2].as_str() {
+                    "stop" => {
+                        if let Err(e) = run_record_stop() {
+                            eprintln!("Stop failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    "toggle" => {
+                        if args.len() < 4 {
+                            eprintln!("Error: 'toggle' requires a recording type (screen|area)");
+                            print_usage();
+                            std::process::exit(1);
+                        }
+                        if let Err(e) = run_record_toggle(&args).await {
+                            eprintln!("Toggle failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    _ => {
+                        if let Err(e) = run_record(&args).await {
+                            eprintln!("Recording failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
                 }
             }
             "ocr" => {
@@ -56,6 +79,25 @@ use openshotx::{
                 run_ocr(&args);
             }
             "scroll" => {
+                if args.len() >= 3 {
+                    match args[2].as_str() {
+                        "stop" => {
+                            if let Err(e) = run_scroll_stop() {
+                                eprintln!("Stop failed: {}", e);
+                                std::process::exit(1);
+                            }
+                            return;
+                        }
+                        "toggle" => {
+                            if let Err(e) = run_scroll_toggle(&args).await {
+                                eprintln!("Toggle failed: {}", e);
+                                std::process::exit(1);
+                            }
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
                 if let Err(e) = run_scroll(&args).await {
                     eprintln!("Scrolling capture failed: {}", e);
                     std::process::exit(1);
@@ -78,8 +120,12 @@ use openshotx::{
         println!("Commands:");
         println!("  capture <type>    Capture a screenshot");
         println!("  record <type>     Record video (MP4/GIF)");
+        println!("  record stop       Stop the active recording");
+        println!("  record toggle     Toggle recording (start or stop)");
         println!("  ocr <image>       Extract text from an image");
         println!("  scroll            Capture scrolling content (auto-stitch frames)");
+        println!("  scroll stop       Stop the active scroll capture");
+        println!("  scroll toggle     Toggle scroll capture (start or stop)");
         println!();
         println!("Capture types:");
         println!("  screen            Capture the entire screen");
@@ -104,12 +150,16 @@ use openshotx::{
         println!("  --stable <n>      Number of stable frames to stop (default: 3)");
         println!("  --prefix <text>   Prefix for filename (default: 'scroll')");
         println!("  --max-height <n>  Maximum output height in pixels (default: 20000)");
+        println!("  --dedup <n>       Deduplication threshold 0-100 (default: 5)");
         println!();
         println!("Examples:");
         println!("  cargo run -- capture screen");
         println!("  cargo run -- record screen");
         println!("  cargo run -- record area --gif");
+        println!("  cargo run -- record stop       # stop a running recording");
+        println!("  cargo run -- record toggle area --gif");
         println!("  cargo run -- scroll");
+        println!("  cargo run -- scroll toggle     # start or stop scroll capture");
     }
     
     fn run_capture(args: &[String]) {
@@ -420,6 +470,82 @@ use openshotx::{
         }
     }
     
+    fn run_record_stop() -> Result<(), Box<dyn std::error::Error>> {
+        let path = state_path();
+        let result = stop_recording(&path, 5)?;
+        match result.outcome {
+            StopOutcome::Stopped => {
+                let path = result.state.and_then(|s| s.output_path);
+                notify::recording_stopped(path.as_deref());
+                println!("\n✓ Recording stopped");
+            }
+            StopOutcome::NothingToStop => {
+                println!("No active recording");
+            }
+            StopOutcome::ForceKillRequired(pid) => {
+                eprintln!("\nProcess did not respond to SIGINT/SIGTERM.");
+                eprintln!("Try: kill -9 {}", pid);
+                std::process::exit(2);
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_record_toggle(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        let path = state_path();
+        let result = stop_recording(&path, 3)?;
+        if result.outcome == StopOutcome::Stopped {
+            let output_path = result.state.and_then(|s| s.output_path);
+            notify::recording_stopped(output_path.as_deref());
+            println!("\n✓ Recording stopped");
+            return Ok(());
+        }
+        let mut modified = Vec::with_capacity(args.len() - 1);
+        modified.push(args[0].clone());
+        modified.push(args[1].clone());
+        modified.extend(args[3..].iter().cloned());
+        run_record(&modified).await
+    }
+
+    fn run_scroll_stop() -> Result<(), Box<dyn std::error::Error>> {
+        let path = scroll_state_path();
+        let result = stop_recording(&path, 5)?;
+        match result.outcome {
+            StopOutcome::Stopped => {
+                let path = result.state.and_then(|s| s.output_path);
+                notify::scroll_stopped(path.as_deref());
+                println!("\n✓ Scroll capture stopped");
+            }
+            StopOutcome::NothingToStop => {
+                println!("No active scroll capture");
+            }
+            StopOutcome::ForceKillRequired(pid) => {
+                eprintln!("\nProcess did not respond to SIGINT/SIGTERM.");
+                eprintln!("Try: kill -9 {}", pid);
+                std::process::exit(2);
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_scroll_toggle(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        let path = scroll_state_path();
+        let result = stop_recording(&path, 3)?;
+        if result.outcome == StopOutcome::Stopped {
+            let output_path = result.state.and_then(|s| s.output_path);
+            notify::scroll_stopped(output_path.as_deref());
+            println!("\n✓ Scroll capture stopped");
+            return Ok(());
+        }
+        let mut modified = Vec::with_capacity(args.len() - 1);
+        modified.push(args[0].clone());
+        modified.push(args[1].clone());
+        if args.len() > 3 {
+            modified.extend(args[3..].iter().cloned());
+        }
+        run_scroll(&modified).await
+    }
+
     async fn run_record(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let record_type = args[2].as_str();
         let mut output_path: Option<PathBuf> = None;
@@ -486,8 +612,21 @@ use openshotx::{
                      std::process::exit(1);
                 }
             
-                let final_path = start_recording(config).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-                
+                let is_gif = config.output_path.extension().map_or(false, |e| e == "gif");
+                let format_label = if is_gif { "gif" } else { "video" };
+
+                notify::recording_started(format_label);
+
+                let final_path = match start_recording(config).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        notify::recording_failed(&e.to_string());
+                        return Err(Box::<dyn std::error::Error>::from(e));
+                    }
+                };
+
+                notify::recording_stopped(Some(&final_path));
+
                 // Post-processing
                 if let Some(ext) = final_path.extension() {
                     if ext == "gif" {
@@ -497,7 +636,7 @@ use openshotx::{
                         }
                     }
                 }
-            
+
                 Ok(())
             }
 
@@ -509,6 +648,7 @@ use openshotx::{
         let mut stable_count: Option<usize> = None;
         let mut prefix: Option<String> = None;
         let mut max_height: Option<u32> = None;
+        let mut dedup_threshold: Option<u8> = None;
 
         let mut i = 2;
         while i < args.len() {
@@ -565,6 +705,15 @@ use openshotx::{
                         .expect("Max height must be a number"));
                     i += 2;
                 }
+                "--dedup" => {
+                    if i + 1 >= args.len() {
+                        eprintln!("Error: --dedup requires a number");
+                        std::process::exit(1);
+                    }
+                    dedup_threshold = Some(args[i + 1].parse::<u8>()
+                        .expect("Dedup threshold must be a number"));
+                    i += 2;
+                }
                 _ => {
                     eprintln!("Error: unknown option '{}'", args[i]);
                     std::process::exit(1);
@@ -591,6 +740,10 @@ use openshotx::{
             config = config.with_max_height(h);
         }
 
+        if let Some(d) = dedup_threshold {
+            config = config.with_deduplication_threshold(d);
+        }
+
         if let Some(p) = prefix {
             config.save_config = config.save_config.with_prefix(p);
         }
@@ -600,10 +753,18 @@ use openshotx::{
         }
 
         // Run scrolling capture (works on both X11 and Wayland via PipeWire)
-        let result = capture_scrolling_pw(&config).await?;
+        notify::scroll_started();
+        let result = match capture_scrolling_pw(&config).await {
+            Ok(r) => r,
+            Err(e) => {
+                notify::scroll_failed(&e.to_string());
+                return Err(Box::<dyn std::error::Error>::from(e));
+            }
+        };
 
         // Save result
         let saved_path = save_scrolling_capture(&result, &config)?;
+        notify::scroll_stopped(Some(&saved_path));
         println!("\nSaved to: {}", saved_path.display());
 
         Ok(())
