@@ -1,4 +1,4 @@
-# <div style="font-size: 72px;">ALPHA AS FUCK</div>
+# <div style="font-size: 72px;">alpha af, buyer beware</div>
 
 ### openshotX
 
@@ -8,7 +8,7 @@ ever since i moved from macos to linux CleanShot X is the one app i actually mis
 
 so let's rip it off and share it with the linux world for free.
 
-i'm building this while assisted by LLMs. it's fine if you don't approve etc, i don't really care. it's been 2 years since i created this repo and nothing proper has come out still. imo it's better this project exists because of AI than never having existed. you don't have to use it.
+i'm building this while assisted by LLMs. it's fine if you don't approve etc, i don't really care. it's been 2 years since i created this repo and nothing proper has come out in the meantime. imo it's better this project exists because of AI than never having existed. you don't have to use it.
 
 ## what actually works right now
 
@@ -27,6 +27,7 @@ i'm building this while assisted by LLMs. it's fine if you don't approve etc, i 
 - `openshotx capture area --ocr` - select area, extract text, copy to clipboard
 - `openshotx ocr screenshot.png` - run ocr on existing image
 - `openshotx ocr screenshot.png --lang eng+fra --min-conf 60` - multi-language + confidence threshold
+- it's still not great in many circumstances with suboptimal backgrounds and fonts. needs a lot of improvement. perhaps would be a good idea to integrate an LLM OCR option, local or via API (more likely).
 
 **scrolling capture (beta - see SCROLLING_CAPTURE.md for known issues):**
 - `openshotx scroll` - capture scrolling content by stitching overlapping frames
@@ -59,6 +60,7 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
 - `--min-conf <n>` - ocr confidence threshold (0-100, default: 50)
 - `--no-clipboard` - don't copy ocr result to clipboard
 
+
 ## technicals
 
 **x11 backend:**
@@ -66,6 +68,7 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
 - XFixes for cursor capture
 - handles every pixel format variant (rgb/bgr, 24/32-bit, lsb/msb)
 - gtk4 overlay for area selection - goes straight to region selection (no dialog)
+HEADS UP! x11 has not been tested/validated at all, as I'm on Wayland
 
 **wayland backend:**
 - uses xdg-desktop-portal via ashpd
@@ -169,7 +172,7 @@ All captures save to ~/Pictures (screenshots) or ~/Videos (recordings) by defaul
 - scrolling capture: partial (works but has quality issues)
 - clipboard: complete (all capture types)
 
-tested on Arch Linux + Hyprland (X11 and Wayland). it's very much a 'it works on my machine' situation fyi.
+tested on Arch Linux + Hyprland (Wayland). it's very much a 'it works on my machine' situation fyi. 
 
 check ROADMAP.md if you want the full picture.
 
